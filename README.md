@@ -164,6 +164,8 @@ setup, with all commands and safety notes.
 
 Once running (systemd or standalone), open the dashboard:
 
+![FanControl dashboard](images/Screenshot.jpg)
+
 - **Monitor mode** (default): everything read-only
 - Click **⚙️ Control** to allow fan-mode writes (still dry-run until you flip
   the config flag)
