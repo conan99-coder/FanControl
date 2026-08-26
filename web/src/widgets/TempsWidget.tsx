@@ -1,0 +1,52 @@
+import type { Snapshot } from '../types'
+import type { RowCfg } from '../rowconfig'
+import { displayName } from '../rowconfig'
+import { WidgetShell } from './shell'
+import { Bar } from './CpuWidget'
+import { EditableRows } from './EditableRows'
+
+export function TempsWidget({
+  snap,
+  edit,
+  rowsCfg,
+  onRowCfg,
+}: {
+  snap: Snapshot
+  edit?: boolean
+  rowsCfg?: RowCfg
+  onRowCfg?: (c: RowCfg) => void
+}) {
+  const thermals = snap.thermals ?? []
+  const cfg = rowsCfg ?? { hidden: {}, names: {}, order: [] }
+  return (
+    <WidgetShell title="Temperatures">
+      {thermals.length === 0 ? (
+        <div className="text-sm text-(--text-faint)">No thermal sensors.</div>
+      ) : (
+        <EditableRows
+          rows={thermals.map((t) => ({ id: String(t.id), label: t.name }))}
+          cfg={cfg}
+          edit={!!edit}
+          canRename
+          onChange={(c) => onRowCfg?.(c)}
+          render={(id, label) => {
+            const t = thermals.find((x) => String(x.id) === id)!
+            const pct = t.max ? Math.min(100, (t.temp / t.max) * 100) : Math.min(100, t.temp)
+            const hot = t.max > 0 && t.temp / t.max > 0.85
+            return (
+              <div className="flex items-center gap-2">
+                <span className="w-32 truncate text-xs text-(--text-muted)">{displayName(cfg, id, label)}</span>
+                <div className="flex-1">
+                  <Bar pct={pct} color={hot ? 'var(--warn)' : 'var(--accent)'} />
+                </div>
+                <span className={`mono text-xs w-12 text-right ${hot ? 'text-(--danger)' : 'text-(--text)'}`}>
+                  {Math.round(t.temp)}°C
+                </span>
+              </div>
+            )
+          }}
+        />
+      )}
+    </WidgetShell>
+  )
+}

@@ -1,0 +1,93 @@
+# FanControl configuration template.
+#
+# Copy to /etc/fanctrl/config.yaml, edit to suit, then:
+#   sudo systemctl restart fanctrl
+#
+# SECRETS: the BMC password and the session secret are resolved from files or
+# environment variables (see the *_path fields) so they are never stored here.
+
+# Address the HTTP server binds. Use 0.0.0.0:8080 to expose on the network
+# (requires auth.Enabled = true), or 127.0.0.1:8080 to reach it over SSH tunnel.
+listen: "0.0.0.0:8080"
+
+# How often to collect a snapshot.
+poll_interval: 2s
+
+# "real" = host + GPU + BMC providers; "mock" = deterministic fake (local dev).
+provider: real
+
+# Safety modes. dry_run collects real data but never writes to the BMC/GPU
+# (every action is logged as would-have). read_only binds localhost and disables
+# write endpoints entirely. KEEP DRY_RUN TRUE UNTIL YOU HAVE VALIDATED THE
+# READING SIDE ON THE LIVE RIG (see README), then set it to false.
+dry_run: true
+read_only: false
+
+auth:
+  # authentication + role protection. Must be true if you bind beyond localhost.
+  enabled: true
+  # how long a login lasts.
+  session_ttl: 24h
+  # session signing secret: 0600 file path, or env:VAR name.
+  secret_path: "/etc/fanctrl/secret"
+  # static users. Password is a bcrypt hash (hash: true) or plaintext (hash:
+  # false). Generate hashes with:  htpasswd -bnBC 10 "" <pw> | tr -d ':\n'
+  users:
+    - name: admin
+      password: "$2y$10$REPLACE_WITH_A_BCRYPT_HASH"
+      role: admin
+      hash: true
+    - name: viewer
+      password: "$2y$10$REPLACE_WITH_A_DIFFERENT_BCRYPT_HASH"
+      role: viewer
+      hash: true
+
+bmc:
+  # Gigabyte MC62-G40 BMC (Redfish, basic auth).
+  url: "https://<BMC_IP>"
+  username: "admin"
+  # 0600 file or env:VAR holding the BMC password (last 11 chars of serial).
+  password_path: "/etc/fanctrl/bmc_password"
+  # Accept the BMC's self-signed certificate.
+  insecure_tls: true
+  # Default profile to select at startup (matches the board's shipping modes).
+  profile: "CPU"
+
+gpu:
+  # Collect GPU telemetry via nvidia-smi. Disable if no NVIDIA driver.
+  enabled: true
+  query: "nvidia-smi"
+  query_interval: 1s
+
+thresholds:
+  # Safety governor gates. When a hard temp is crossed the service reverts to
+  # the "CPU" profile (or logs, if dry-run). Set hard > warn.
+  gpu_temp_warn: 82
+  gpu_temp_hard: 88
+  cpu_temp_warn: 78
+  cpu_temp_hard: 92
+  disk_used_warn: 90
+  # how long the governor stays "cooling down" before it will trip again.
+  cooldown: 5m
+
+history:
+  # Rolling history for sparklines. Small on-disk ring survives restarts.
+  enabled: true
+  path: "/var/lib/fanctrl/history.json"
+  points: 600
+  interval: 2s
+
+# Default widget layout (positions in a 12-column grid). Users can reorder on
+# the dashboard; this is the fallback.
+layout:
+  columns: 12
+  row_height: 60
+  widgets:
+    - { id: summary, type: summary, x: 0, y: 0, w: 12, h: 1, show: true }
+    - { id: gpu0, type: gpu, x: 0, y: 1, w: 4, h: 3, gpu: 0, show: true }
+    - { id: gpu1, type: gpu, x: 4, y: 1, w: 4, h: 3, gpu: 1, show: true }
+    - { id: cpu, type: cpu, x: 8, y: 1, w: 4, h: 3, show: true }
+    - { id: fans, type: fans, x: 0, y: 4, w: 6, h: 3, show: true }
+    - { id: temps, type: temps, x: 6, y: 4, w: 6, h: 3, show: true }
+    - { id: disk, type: disk, x: 0, y: 7, w: 6, h: 2, show: true }
+    - { id: net, type: net, x: 6, y: 7, w: 6, h: 2, show: true }

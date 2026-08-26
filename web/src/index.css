@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+/*
+  Design tokens (dark-first). Dark theme is the default (rig dashboards read
+  best dark); the light theme is toggled by adding `.theme-light` on <html>.
+  Colors avoid generic SaaS blue: deep charcoal base, teal/cyan accent, and a
+  single warm amber accent for warnings/alerts.
+*/
+:root {
+  --bg: #0e1012;
+  --bg-panel: #16191c;
+  --bg-panel-2: #1c2024;
+  --bg-hover: #23282d;
+  --border: #2a3036;
+  --text: #e6e9ec;
+  --text-muted: #9aa4ad;
+  --text-faint: #6b757e;
+  --accent: #2dd4bf;       /* teal-400 */
+  --accent-2: #22d3ee;     /* cyan-400 */
+  --accent-strong: #0d9488; /* teal-600 */
+  --warn: #f59e0b;          /* amber-500 */
+  --danger: #ef4444;        /* red-500 */
+  --ok: #4ade80;            /* green-400 */
+  --grid-bg: rgba(255,255,255,0.02);
+  --grid-border: rgba(255,255,255,0.05);
+}
+
+.theme-light {
+  --bg: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #eef0f2;
+  --bg-hover: #e6e9ec;
+  --border: #d9dde1;
+  --text: #1a1d21;
+  --text-muted: #5c6670;
+  --text-faint: #98a1ab;
+  --accent: #0d9488;
+  --accent-2: #0891b2;
+  --accent-strong: #0f766e;
+  --grid-bg: rgba(13,148,136,0.02);
+  --grid-border: rgba(0,0,0,0.05);
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "tnum";
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Numeric readouts use tabular/mono type for stable widths. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small uppercase section label */
+.label {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+/* Card panel */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+/* Warning/danger pills */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.pill-warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.pill-danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.pill-ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+
+/* gridstack base overrides */
+.grid-stack {
+  background: transparent;
+}
+.grid-stack-item-content {
+  inset: 6px; /* gutter between widgets */
+}
+
+/* Drag placeholder: gridstack's default is rgba(0,0,0,0.1) — invisible on the
+   dark background. Use an accent-tinted outline so the drop target clearly
+   reads in both dark and light themes. */
+.grid-stack-placeholder > .placeholder-content {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: 0.75rem;
+}
+
+/* The widget being dragged: give it a lifted, slightly translucent look that
+   reads on dark + light. */
+.grid-stack-item.ui-draggable-dragging > .grid-stack-item-content {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0.92;
+}
+
+/* Range slider for fan control */
+input[type="range"] {
+  accent-color: var(--accent-strong);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.animate-pulse-danger { animation: pulse-danger 1.4s ease-in-out infinite; }

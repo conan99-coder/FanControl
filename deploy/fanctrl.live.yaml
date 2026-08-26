@@ -1,0 +1,46 @@
+# FanControl config — WRITES ENABLED, localhost only (no auth).
+#
+# dry_run = false => the verified write (fan mode: Auto/Half/Full) actually
+# takes effect. Monitor mode is STILL ON at startup, so no write happens until
+# you click Monitor -> Control in the UI (the server enforces this).
+#
+# Bind is 127.0.0.1:8080: the config validator permits auth off for
+# write-capable binds ONLY on localhost. Your reverse proxy sits on the same
+# host (or via tunnel) and forwards here; it provides the password.
+
+listen: "127.0.0.1:8080"
+poll_interval: 2s
+provider: real
+dry_run: false
+read_only: false
+
+# No auth: the app is localhost-only; protection is your reverse proxy.
+auth:
+  enabled: false
+
+bmc:
+  url: "https://<BMC_IP>"
+  username: "admin"
+  # 0600 file holding the BMC password (last 11 chars of the motherboard serial).
+  password_path: "/etc/fanctrl/bmc_password"
+  insecure_tls: true
+  profile: "CPU"
+
+gpu:
+  enabled: true
+  query: "nvidia-smi"
+  query_interval: 1s
+
+thresholds:
+  gpu_temp_warn: 82
+  gpu_temp_hard: 88
+  cpu_temp_warn: 78
+  cpu_temp_hard: 92
+  disk_used_warn: 90
+  cooldown: 5m
+
+history:
+  enabled: true
+  path: "/var/lib/fanctrl/history.json"
+  points: 600
+  interval: 2s

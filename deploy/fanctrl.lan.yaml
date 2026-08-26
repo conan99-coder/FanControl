@@ -1,0 +1,46 @@
+# FanControl config — OPEN ACCESS (reachable everywhere, no app login).
+#
+# listen 0.0.0.0 + dry_run false + auth off is normally REFUSED by the config
+# validator. auth.allow_unauthenticated_writes: true is the EXPLICIT opt-out —
+# set only because an upstream proxy/firewall gates this port. A loud warning
+# is logged at startup.
+#
+# Monitor mode is STILL ON by default: no fan write happens until someone
+# clicks Monitor -> Control in the UI.
+
+listen: "0.0.0.0:8080"
+poll_interval: 2s
+provider: real
+dry_run: false
+read_only: false
+
+auth:
+  enabled: false
+  # operator opt-out: unprotected writes on the open LAN (proxy/firewall gate).
+  allow_unauthenticated_writes: true
+
+bmc:
+  url: "https://<BMC_IP>"
+  username: "admin"
+  password_path: "/etc/fanctrl/bmc_password"
+  insecure_tls: true
+  profile: "CPU"
+
+gpu:
+  enabled: true
+  query: "nvidia-smi"
+  query_interval: 1s
+
+thresholds:
+  gpu_temp_warn: 82
+  gpu_temp_hard: 88
+  cpu_temp_warn: 78
+  cpu_temp_hard: 92
+  disk_used_warn: 90
+  cooldown: 5m
+
+history:
+  enabled: true
+  path: "/var/lib/fanctrl/history.json"
+  points: 600
+  interval: 2s

@@ -1,0 +1,27 @@
+[Unit]
+Description=FanControl — Vast rig observability and fan control
+Documentation=file:///etc/fanctrl/README.md
+After=network.target
+
+[Service]
+Type=simple
+# The binary reads /etc/fanctrl/config.yaml by default (see ExecStart).
+ExecStart=/usr/local/bin/fanctrl --config /etc/fanctrl/config.yaml
+WorkingDirectory=/etc/fanctrl
+
+# Sandboxing & hardening. The service needs /proc + /sysfs access to collect
+# host telemetry, and the BMC/GPU network access for control. It does NOT need
+# a shell.
+User=root
+Group=root
+# Moderate safety limits.
+Nice=0
+Restart=on-failure
+RestartSec=5
+
+# NOTE: If you want to boot with control DISABLED until you've validated the
+# reading side, add `--dry-run` to ExecStart. Recommend running dry-run first
+# (see README), then removing the flag.
+
+[Install]
+WantedBy=multi-user.target
