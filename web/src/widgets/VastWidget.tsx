@@ -50,8 +50,8 @@ export function VastWidget({ snap }: { snap: Snapshot }) {
                     <span className="text-(--text-faint)">Listed rate</span>
                     <span className="mono text-(--text)">{fmtUSD(r.listedGpuCost)}/h·GPU</span>
                   </div>
-                  <div className="flex justify-between" title="Your accepted rate — earn_hour from Vast (what you're actually paid per hour)">
-                    <span className="text-(--text-faint)">Accepted rate</span>
+                  <div className="flex justify-between" title="Your current rate — earn_hour from Vast (what you're actually paid per hour)">
+                    <span className="text-(--text-faint)">Current rate</span>
                     <span className="mono text-(--ok)">{fmtUSD(r.earnHour)}/h</span>
                   </div>
                   <div className="flex justify-between" title="Listed rate × GPUs (fully rented)">
@@ -74,19 +74,23 @@ export function VastWidget({ snap }: { snap: Snapshot }) {
                     <span className="text-(--text-faint)">Guaranteed</span>
                     <span className="mono text-(--ok)">{hasEnd ? fmtUSD(guaranteed) : '—'}</span>
                   </div>
-                  <div className="flex justify-between" title="Vast's average weekly earnings (average/day × 7)">
-                    <span className="text-(--text-faint)">Earnings average/week</span>
-                    <span className="mono text-(--ok)">{fmtUSD(r.earnDay * 7)}</span>
+                  <div className="flex justify-between" title="Live potential: listed rate × GPUs × 24 — a full day at your listed price">
+                    <span className="text-(--text-faint)">Earnings potential rate/day</span>
+                    <span className="mono text-(--accent-2)">{fmtUSD(potentialRate * 24)}</span>
                   </div>
                   <div className="pl-2 flex justify-between" title="Listed rate × GPUs × hours left until the renter contracts end">
                     <span className="text-(--text-faint)">Potential</span>
                     <span className="mono text-(--accent-2)">{hasEnd ? fmtUSD(potential) : '—'}</span>
                   </div>
-                  <div />
+                  <div className="flex justify-between" title="Vast's average weekly earnings (average/day × 7)">
+                    <span className="text-(--text-faint)">Earnings average/week</span>
+                    <span className="mono text-(--ok)">{fmtUSD(r.earnDay * 7)}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-(--text-faint)">Listing ends</span>
                     <span className="mono text-(--text)">{fmtDateTime(r.endDate)}</span>
                   </div>
+                  <div />
                 </div>
               </div>
             )

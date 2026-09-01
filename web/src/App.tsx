@@ -303,7 +303,7 @@ export default function App() {
       case 'net':
         return <NetWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'net')} onRowCfg={(c) => setRowCfg('net', c)} />
       case 'temps':
-        return <TempsWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} onRowCfg={(c) => setRowCfg('temps', c)} />
+        return <TempsWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} onRowCfg={(c) => setRowCfg('temps', c)} thresholds={status?.thresholds} />
       case 'tempsgraph':
         return (
           <TempsGraphWidget
