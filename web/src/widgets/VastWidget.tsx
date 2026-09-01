@@ -36,7 +36,7 @@ export function VastWidget({ snap }: { snap: Snapshot }) {
                       </span>
                     )}
                     {r.reliability > 0 && (
-                      <span className="mono text-[10px] text-(--text-faint)">{(r.reliability * 100).toFixed(1)}%</span>
+                      <span className="mono text-[10px] text-(--text-faint)">{(r.reliability * 100).toFixed(2)}%</span>
                     )}
                   </span>
                 </div>
