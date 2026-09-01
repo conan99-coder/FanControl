@@ -31,6 +31,9 @@ gives you one dashboard for all of it.
     memory/per-core), Temperatures, **Drives (NVMe: model/serial/size/temp)**,
     Disk volumes, Network throughput, Voltages
   - **Light/dark theme** toggle; responsive grid (reflows on narrow windows)
+  - **Temperature history graph** (Temp graph widget): multi-sensor time-series
+    of the same BMC thermal sensors, click-to-toggle legend to hide sensors you
+    don't care about (persisted per browser)
 - **Real hardware telemetry**:
   - Host: CPU load/temp, memory, disk usage + IO rates, network (from `/proc`,
     `/sysfs`)

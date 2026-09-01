@@ -20,9 +20,10 @@ import { DrivesWidget } from './widgets/DrivesWidget'
 import { NetWidget } from './widgets/NetWidget'
 import { VoltsWidget } from './widgets/VoltsWidget'
 import { TempsWidget } from './widgets/TempsWidget'
+import { TempsGraphWidget } from './widgets/TempsGraphWidget'
 import { FansWidget } from './widgets/FansWidget'
 
-export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'fans' | 'volts'
+export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts'
 
 interface WidgetDef {
   id: string
@@ -139,6 +140,7 @@ export default function App() {
     { id: 'cpu', type: 'cpu' },
     { id: 'fans', type: 'fans' },
     { id: 'temps', type: 'temps' },
+    { id: 'tempsgraph', type: 'tempsgraph' },
     { id: 'drives', type: 'drives' },
     { id: 'disk', type: 'disk' },
     { id: 'net', type: 'net' },
@@ -249,10 +251,11 @@ export default function App() {
       { id: 'cpu', x: 8, y: 1, w: 4, h: 3 },
       { id: 'fans', x: 0, y: 4, w: 6, h: 4 },
       { id: 'temps', x: 6, y: 4, w: 6, h: 4 },
-      { id: 'drives', x: 0, y: 8, w: 6, h: 3 },
-      { id: 'disk', x: 6, y: 8, w: 6, h: 3 },
-      { id: 'volts', x: 0, y: 11, w: 6, h: 2 },
-      { id: 'net', x: 6, y: 11, w: 6, h: 2 },
+      { id: 'tempsgraph', x: 0, y: 8, w: 12, h: 5 },
+      { id: 'drives', x: 0, y: 13, w: 6, h: 3 },
+      { id: 'disk', x: 6, y: 13, w: 6, h: 3 },
+      { id: 'volts', x: 0, y: 16, w: 6, h: 2 },
+      { id: 'net', x: 6, y: 16, w: 6, h: 2 },
     ]
   }
 
@@ -295,6 +298,8 @@ export default function App() {
         return <NetWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'net')} onRowCfg={(c) => setRowCfg('net', c)} />
       case 'temps':
         return <TempsWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} onRowCfg={(c) => setRowCfg('temps', c)} />
+      case 'tempsgraph':
+        return <TempsGraphWidget snap={snap} />
       case 'fans':
         return <FansWidget snap={snap} admin={admin} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} monitor={monitor} dutyOverride={status?.capabilities?.dutyOverride ?? true} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'fans')} onRowCfg={(c) => setRowCfg('fans', c)} />
       default:

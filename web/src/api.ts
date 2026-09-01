@@ -62,6 +62,11 @@ export function getMetrics(): Promise<Snapshot> {
   return json('/api/metrics')
 }
 
+// getHistory returns up to the last ~300 snapshots (time-series as an array).
+export function getHistory(): Promise<Snapshot[]> {
+  return json('/api/history')
+}
+
 export function getStatus(): Promise<Status> {
   return json('/api/status')
 }
