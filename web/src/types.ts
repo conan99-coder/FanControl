@@ -82,6 +82,22 @@ export interface CPU {
   perCoreLoad: number[]
 }
 
+export interface VastRig {
+  id: number
+  hostname: string
+  gpuName: string
+  numGpus: number
+  listedGpuCost: number
+  earnHour: number
+  earnDay: number
+  rentalsRunning: number
+  clientEndDate: number
+  endDate: number
+  verification: string
+  reliability: number
+  geolocation: string
+}
+
 export interface Snapshot {
   time: string
   cpu: Partial<CPU>
@@ -92,6 +108,7 @@ export interface Snapshot {
   fans: Fan[]
   thermals: Thermal[]
   extra: Scalar[]
+  vastRigs?: VastRig[]
 }
 
 export interface Policy {
@@ -134,4 +151,23 @@ export function formatRate(n: number): string {
 
 export function fmtPct(n: number): string {
   return (isFinite(n) ? n : 0).toFixed(0) + '%'
+}
+
+export function fmtUSD(n: number): string {
+  return '$' + (isFinite(n) ? n : 0).toFixed(2)
+}
+
+export function fmtDate(unixSec: number): string {
+  if (!unixSec || !isFinite(unixSec)) return '—'
+  const d = new Date(unixSec * 1000)
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+}
+
+// fmtDateTime formats a unix-seconds timestamp as "YYYY-MM-DD HH:mm" (24h).
+export function fmtDateTime(unixSec: number): string {
+  if (!unixSec || !isFinite(unixSec)) return '—'
+  const d = new Date(unixSec * 1000)
+  if (isNaN(d.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }

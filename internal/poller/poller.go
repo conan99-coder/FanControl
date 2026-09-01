@@ -24,6 +24,11 @@ type Poller struct {
 	latest  metrics.Snapshot
 	lastErr error
 
+	// Provider-failure log throttling: a failing provider (e.g. BMC login
+	// backoff) would otherwise log every tick and flood the journal.
+	warnMu    sync.Mutex
+	lastWarns map[string]time.Time
+
 	// Governor state
 	governor *governor
 }
@@ -35,8 +40,20 @@ func New(providers []metrics.Provider, cfg config.Thresholds, hist *Ring, log *s
 		cfg:       cfg,
 		hist:      hist,
 		log:       log,
+		lastWarns: map[string]time.Time{},
 		governor:  newGovernor(cfg),
 	}
+}
+
+// warnThrottled logs a provider failure at most once per interval per provider.
+func (p *Poller) warnThrottled(provider string, err error) {
+	p.warnMu.Lock()
+	defer p.warnMu.Unlock()
+	if last, ok := p.lastWarns[provider]; ok && time.Since(last) < time.Minute {
+		return
+	}
+	p.lastWarns[provider] = time.Now()
+	p.log.Warn("provider failed", "provider", provider, "err", err)
 }
 
 // Start runs the poll loop until ctx is cancelled. It immediately collects a
@@ -66,8 +83,8 @@ func (p *Poller) tick(ctx context.Context) {
 	for _, prov := range p.providers {
 		snap, err := prov.Collect(ctx)
 		if err != nil {
-			p.log.Warn("provider failed", "provider", prov.Name(), "err", err)
 			// A transient failure in one provider shouldn't wipe the others.
+			p.warnThrottled(prov.Name(), err)
 			lastErr = err
 			continue
 		}
@@ -114,6 +131,9 @@ func merge(dst *metrics.Snapshot, src metrics.Snapshot) {
 	}
 	if len(src.Extra) > 0 {
 		dst.Extra = src.Extra
+	}
+	if len(src.VastRigs) > 0 {
+		dst.VastRigs = src.VastRigs
 	}
 	if src.Time.After(dst.Time) {
 		dst.Time = src.Time

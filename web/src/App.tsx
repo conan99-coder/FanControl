@@ -21,9 +21,10 @@ import { NetWidget } from './widgets/NetWidget'
 import { VoltsWidget } from './widgets/VoltsWidget'
 import { TempsWidget } from './widgets/TempsWidget'
 import { TempsGraphWidget } from './widgets/TempsGraphWidget'
+import { VastWidget } from './widgets/VastWidget'
 import { FansWidget } from './widgets/FansWidget'
 
-export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts'
+export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast'
 
 interface WidgetDef {
   id: string
@@ -145,6 +146,7 @@ export default function App() {
     { id: 'disk', type: 'disk' },
     { id: 'net', type: 'net' },
     { id: 'volts', type: 'volts' },
+    { id: 'vast', type: 'vast' },
   ]
 
   // Initialize gridstack once the grid div is actually in the DOM (i.e. after
@@ -256,6 +258,7 @@ export default function App() {
       { id: 'disk', x: 6, y: 13, w: 6, h: 3 },
       { id: 'volts', x: 0, y: 16, w: 6, h: 2 },
       { id: 'net', x: 6, y: 16, w: 6, h: 2 },
+      { id: 'vast', x: 0, y: 18, w: 6, h: 4 },
     ]
   }
 
@@ -299,9 +302,11 @@ export default function App() {
       case 'temps':
         return <TempsWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} onRowCfg={(c) => setRowCfg('temps', c)} />
       case 'tempsgraph':
-        return <TempsGraphWidget snap={snap} />
+        return <TempsGraphWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} />
       case 'fans':
         return <FansWidget snap={snap} admin={admin} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} monitor={monitor} dutyOverride={status?.capabilities?.dutyOverride ?? true} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'fans')} onRowCfg={(c) => setRowCfg('fans', c)} />
+      case 'vast':
+        return <VastWidget snap={snap} />
       default:
         return null
     }

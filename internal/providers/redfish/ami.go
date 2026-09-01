@@ -29,6 +29,7 @@ type amiClient struct {
 	mu        sync.Mutex
 	csrf      string
 	loggedIn  time.Time
+	nextRetry time.Time // login backoff: don't retry before this
 	lastErr   error
 }
 
@@ -59,21 +60,33 @@ func (c *amiClient) Close() error {
 	return nil
 }
 
+// loginBackoff is how long to wait before retrying a failed login. MegaRAC
+// has brute-force protection: with the poller ticking every ~2s, retrying on
+// every tick would lock the BMC account permanently. A short backoff keeps the
+// client from hammering the BMC while allowing recovery once it unlocks.
+const loginBackoff = 2 * time.Minute
+
 // ensureSession logs in if needed and returns a valid CSRF token. It is safe
-// for concurrent use; login is refreshed every 30 minutes or on demand.
+// for concurrent use; login is refreshed every 30 minutes or on demand. After
+// a failed login it backs off for loginBackoff before trying again.
 func (c *amiClient) ensureSession(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.csrf != "" && time.Since(c.loggedIn) < 30*time.Minute {
 		return c.csrf, nil
 	}
+	if time.Now().Before(c.nextRetry) {
+		return "", fmt.Errorf("ami login backoff (will retry in %s)", time.Until(c.nextRetry).Round(time.Second))
+	}
 	csrf, err := c.login(ctx)
 	c.lastErr = err
 	if err != nil {
+		c.nextRetry = time.Now().Add(loginBackoff)
 		return "", err
 	}
 	c.csrf = csrf
 	c.loggedIn = time.Now()
+	c.nextRetry = time.Time{}
 	return csrf, nil
 }
 
@@ -272,7 +285,7 @@ func newCookieJar() http.CookieJar {
 // memoryJar is a minimal in-memory CookieJar to avoid importing
 // net/http/cookiejar's public interface complexities in tests.
 type memoryJar struct {
-	mu    sync.Mutex
+	mu      sync.Mutex
 	cookies map[string][]*http.Cookie
 }
 

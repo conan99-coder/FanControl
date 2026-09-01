@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Snapshot } from '../types'
+import type { RowCfg } from '../rowconfig'
+import { displayName, emptyCfg } from '../rowconfig'
 import { WidgetShell } from './shell'
 import * as api from '../api'
 
@@ -16,7 +18,11 @@ import * as api from '../api'
 // Sliding time window shown (5 minutes) and rolling buffer length.
 const WINDOW_MS = 5 * 60 * 1000
 const MAX_POINTS = 260
+// The graph's OWN hide state (independent from the Temperatures widget):
+// - UNHIDDEN: sensors unselected in edit mode — hidden from normal mode.
+// - LINES: line toggles — dimmed chip, line off, chip stays visible.
 const HIDDEN_KEY = 'fc-tempsgraph-hidden'
+const LINES_KEY = 'fc-tempsgraph-lines'
 
 // Palette (24 distinct hues) — saturated mid-tones, readable on dark + light.
 const PALETTE = [
@@ -39,9 +45,9 @@ function toPt(s: Snapshot): Pt | null {
   return { t, vals }
 }
 
-function loadHidden(): Set<string> {
+function loadSet(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(HIDDEN_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return new Set()
     const arr = JSON.parse(raw)
     return new Set(Array.isArray(arr) ? arr : [])
@@ -54,35 +60,24 @@ function fmtTime(t: number): string {
   return new Date(t).toLocaleTimeString()
 }
 
-// niceTicks returns ~4 round-ish ticks covering [min, max].
-function niceTicks(min: number, max: number): number[] {
-  const span = max - min || 1
-  const step0 = span / 4
-  const mag = Math.pow(10, Math.floor(Math.log10(step0)))
-  const norm = step0 / mag
-  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag
-  const start = Math.ceil(min / step) * step
-  const out: number[] = []
-  for (let v = start; v <= max + 1e-9; v += step) out.push(v)
-  return out
-}
-
-// useWidth tracks the rendered width of an element (responsive chart).
-function useWidth(): [RefObject<HTMLDivElement>, number] {
+// useSize tracks the rendered width+height of an element so the chart expands
+// to fill the widget (both axes), not a fixed size.
+function useSize(): [RefObject<HTMLDivElement>, { w: number; h: number }] {
   const ref = useRef<HTMLDivElement>(null)
-  const [w, setW] = useState(0)
+  const [size, setSize] = useState({ w: 0, h: 0 })
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) {
-        setW(Math.round(e.contentRect.width))
+        const cr = e.contentRect
+        setSize({ w: Math.round(cr.width), h: Math.round(cr.height) })
       }
     })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  return [ref, w]
+  return [ref, size]
 }
 
 function LineChart({
@@ -97,18 +92,21 @@ function LineChart({
   colors: Map<string, string>
 }) {
   const clipId = useId()
-  const [ref, width] = useWidth()
-  const H = 190
+  const [ref, size] = useSize()
   const M = { l: 42, r: 12, t: 10, b: 20 }
-  const W = width > 0 ? width : 640
+  const W = size.w > 0 ? size.w : 640
+  const H = size.h > 0 ? size.h : 190
   const plotW = W - M.l - M.r
   const plotH = H - M.t - M.b
 
+  // A sensor is drawn in the chart unless its line is toggled off in the
+  // legend. (Sensors unselected in edit mode are filtered out before this by
+  // passing only row-visible ids.)
   const visible = ids.filter((id) => !hidden.has(id))
 
   if (pts.length < 2) {
     return (
-      <div ref={ref} className="flex items-center justify-center h-[190px] text-xs text-(--text-faint)">
+      <div ref={ref} className="flex items-center justify-center h-full w-full text-xs text-(--text-faint)">
         Collecting…
       </div>
     )
@@ -118,32 +116,19 @@ function LineChart({
   const tMin = Math.max(pts[0].t, tMax - WINDOW_MS)
   const inWin = pts.filter((p) => p.t >= tMin)
 
-  const allVals: number[] = []
-  for (const id of visible) {
-    for (const p of inWin) {
-      const v = p.vals[id]
-      if (v != null && isFinite(v)) allVals.push(v)
-    }
-  }
-  if (allVals.length === 0 || visible.length === 0) {
+  const anyData = visible.some((id) => inWin.some((p) => p.vals[id] != null && isFinite(p.vals[id])))
+  if (!anyData || visible.length === 0) {
     return (
-      <div ref={ref} className="flex items-center justify-center h-[190px] text-xs text-(--text-faint)">
+      <div ref={ref} className="flex items-center justify-center h-full w-full text-xs text-(--text-faint)">
         {visible.length === 0 ? 'All sensors hidden — click a chip to show it.' : 'Collecting…'}
       </div>
     )
   }
 
-  let dmin = Math.min(...allVals)
-  let dmax = Math.max(...allVals)
-  const pad = Math.max((dmax - dmin) * 0.12, 3)
-  dmin -= pad
-  dmax += pad
-  const ticks = niceTicks(dmin, dmax)
-  if (ticks.length > 0) {
-    dmin = ticks[0]
-    dmax = ticks[ticks.length - 1]
-    if (dmax - dmin < 1) dmax = dmin + 1
-  }
+  // Fixed range 0-100°C so the graph is comparable over time.
+  const dmin = 0
+  const dmax = 100
+  const ticks = [0, 25, 50, 75, 100]
 
   const spanT = Math.max(tMax - tMin, 1)
   const spanV = dmax - dmin || 1
@@ -171,7 +156,7 @@ function LineChart({
   const midT = (tMin + tMax) / 2
 
   return (
-    <div ref={ref} className="w-full">
+    <div ref={ref} className="w-full h-full">
       <svg width={W} height={H} className="block">
         <defs>
           <clipPath id={clipId}>
@@ -218,11 +203,25 @@ function LineChart({
   )
 }
 
-export function TempsGraphWidget({ snap }: { snap: Snapshot }) {
+export function TempsGraphWidget({
+  snap,
+  edit,
+  rowsCfg,
+}: {
+  snap: Snapshot
+  edit?: boolean
+  rowsCfg?: RowCfg
+}) {
   const bufRef = useRef<Pt[]>([])
   const [buf, setBuf] = useState<Pt[]>([])
-  const [hidden, setHiddenState] = useState<Set<string>>(loadHidden)
+  // The graph's own hide state — completely independent from the Temperatures
+  // widget (which keeps its own rows config on fc-rows["temps"]).
+  const [hidden, setHiddenState] = useState<Set<string>>(() => loadSet(HIDDEN_KEY)) // unselected (edit mode)
+  const [lines, setLinesState] = useState<Set<string>>(() => loadSet(LINES_KEY)) // line toggles (chip stays)
   const bootRef = useRef(false)
+  // The Temperatures widget's row config is used READ-ONLY here, for custom
+  // sensor names (renames show in both widgets). Hiding stays separate.
+  const cfg = rowsCfg ?? emptyCfg()
 
   // Seed the buffer from server-side history once (pre-existing samples).
   useEffect(() => {
@@ -272,8 +271,28 @@ export function TempsGraphWidget({ snap }: { snap: Snapshot }) {
       // best-effort persistence
     }
   }
+  const setLines = (next: Set<string>) => {
+    setLinesState(next)
+    try {
+      localStorage.setItem(LINES_KEY, JSON.stringify([...next]))
+    } catch {
+      // best-effort persistence
+    }
+  }
 
-  const toggle = (id: string) => {
+  // Normal mode: clicking a chip toggles the sensor's LINE only — the chip
+  // stays in the widget (dimmed) so it can be toggled back on.
+  const toggleLine = (id: string) => {
+    const next = new Set(lines)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setLines(next)
+  }
+
+  // Edit mode: clicking a chip (un)selects the sensor in the graph's OWN hide
+  // state — unselected sensors are hidden from the graph's normal mode but are
+  // untouched in the Temperatures widget.
+  const toggleUnselected = (id: string) => {
     const next = new Set(hidden)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -294,45 +313,66 @@ export function TempsGraphWidget({ snap }: { snap: Snapshot }) {
       {thermals.length === 0 ? (
         <div className="text-sm text-(--text-faint)">No thermal sensors.</div>
       ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        <div className="flex flex-col h-full min-h-0">
+          <div className="flex flex-wrap items-center gap-1.5 mb-2 shrink-0">
             <button
               className="px-2 py-0.5 rounded-full text-[10px] border border-(--border) text-(--text-muted) hover:text-(--text) hover:border-(--accent)"
-              onClick={() => setHidden(new Set())}
+              onClick={() => (edit ? setHidden(new Set()) : setLines(new Set()))}
             >
               All
             </button>
             <button
               className="px-2 py-0.5 rounded-full text-[10px] border border-(--border) text-(--text-muted) hover:text-(--text) hover:border-(--accent)"
-              onClick={() => setHidden(new Set(thermals.map((t) => String(t.id))))}
+              onClick={() => (edit ? setHidden(new Set(thermals.map((t) => String(t.id)))) : setLines(new Set(thermals.map((t) => String(t.id)))))}
             >
               None
             </button>
             {thermals.map((t) => {
               const id = String(t.id)
-              const on = !hidden.has(id)
+              const unselected = hidden.has(id) // unselected in edit mode
+              const lineOff = lines.has(id) // line toggled off (chip stays)
               const c = colors.get(id) ?? '#888'
               const v = lastPt?.vals[id]
+              const label = displayName(cfg, id, t.name)
+              // Unselected sensors are hidden from the graph's normal mode; in
+              // edit mode they show dimmed so you can restore them.
+              if (unselected && !edit) return null
+              // Outside edit mode the chip NEVER disappears when clicked: it
+              // only toggles the sensor's line (dimmed while off).
+              const off = edit ? unselected || lineOff : lineOff
               return (
                 <button
                   key={id}
-                  onClick={() => toggle(id)}
-                  title={on ? 'Click to hide' : 'Click to show'}
+                  onClick={() => (edit ? toggleUnselected(id) : toggleLine(id))}
+                  title={
+                    edit
+                      ? unselected
+                        ? 'Restore sensor (show in normal mode)'
+                        : 'Unselect sensor (hide from normal mode)'
+                      : `${label} — click to ${lineOff ? 'show' : 'hide'} its line`
+                  }
                   className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] border transition ${
-                    on
-                      ? 'border-(--border) bg-(--bg-panel-2) text-(--text-muted) hover:text-(--text)'
-                      : 'border-(--border) text-(--text-faint) opacity-40 hover:opacity-70'
+                    off
+                      ? 'border-(--border) text-(--text-faint) opacity-40 hover:opacity-70'
+                      : 'border-(--border) bg-(--bg-panel-2) text-(--text-muted) hover:text-(--text)'
                   }`}
                 >
                   <span className="inline-block w-2 h-2 rounded-full" style={{ background: c }} />
-                  <span className="max-w-[110px] truncate">{t.name}</span>
+                  <span className="max-w-[110px] truncate">{label}</span>
                   <span className="mono">{v != null && isFinite(v) ? `${Math.round(v)}°` : '—'}</span>
                 </button>
               )
             })}
           </div>
-          <LineChart pts={buf} ids={thermals.map((t) => String(t.id))} hidden={hidden} colors={colors} />
-        </>
+          <div className="flex-1 min-h-[120px]">
+            <LineChart
+              pts={buf}
+              ids={thermals.filter((t) => !hidden.has(String(t.id))).map((t) => String(t.id))}
+              hidden={lines}
+              colors={colors}
+            />
+          </div>
+        </div>
       )}
     </WidgetShell>
   )

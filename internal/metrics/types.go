@@ -11,13 +11,13 @@ import "time"
 type Kind int
 
 const (
-	KindCount Kind = iota
-	KindPercent   // utilization, duty %, load
-	KindTemp      // °C
-	KindFanRPM    // fan speed in RPM
-	KindPower     // watts
-	KindBytes     // base-2 byte quantity stored (disk used / free)
-	KindRate      // bytes-per-second or ops-per-second (already computed rate)
+	KindCount   Kind = iota
+	KindPercent      // utilization, duty %, load
+	KindTemp         // °C
+	KindFanRPM       // fan speed in RPM
+	KindPower        // watts
+	KindBytes        // base-2 byte quantity stored (disk used / free)
+	KindRate         // bytes-per-second or ops-per-second (already computed rate)
 	KindVolts
 )
 
@@ -33,10 +33,10 @@ type Scalar struct {
 
 // Fan is a controllable/observable fan attached to the motherboard BMC.
 type Fan struct {
-	ID     int     `json:"id"`      // BMC sensor id
-	Name   string  `json:"name"`    // human label / tach name if known
-	RPM    float64 `json:"rpm"`     // current speed in RPM
-	Duty   float64 `json:"duty"`    // manual duty % if a value was set/known
+	ID     int     `json:"id"`   // BMC sensor id
+	Name   string  `json:"name"` // human label / tach name if known
+	RPM    float64 `json:"rpm"`  // current speed in RPM
+	Duty   float64 `json:"duty"` // manual duty % if a value was set/known
 	MaxRPM float64 `json:"maxRpm"`
 	// AutoDuty is the estimated duty % the active profile's curve produces at
 	// the current temperature (interpolated from arrRef/arrDuty). 0 = unknown.
@@ -56,16 +56,16 @@ type Thermal struct {
 type GPU struct {
 	Index      int     `json:"index"` // NVML index / nvidia-smi ordering
 	Name       string  `json:"name"`
-	Temp       float64 `json:"temp"`        // °C
-	Util       float64 `json:"util"`        // %
-	Power      float64 `json:"power"`       // W
-	PowerLimit float64 `json:"powerLimit"`  // W
-	FanPct     float64 `json:"fanPct"`      // %
-	FanControl bool    `json:"fanControl"`  // whether fan writes are supported
-	VRAMUsed   float64 `json:"vramUsed"`    // bytes
-	VRAMTotal  float64 `json:"vramTotal"`   // bytes
-	MemoryUtil float64 `json:"memoryUtil"`  // %
-	MaxTemp    float64 `json:"maxTemp"`     // throttle temperature threshold
+	Temp       float64 `json:"temp"`       // °C
+	Util       float64 `json:"util"`       // %
+	Power      float64 `json:"power"`      // W
+	PowerLimit float64 `json:"powerLimit"` // W
+	FanPct     float64 `json:"fanPct"`     // %
+	FanControl bool    `json:"fanControl"` // whether fan writes are supported
+	VRAMUsed   float64 `json:"vramUsed"`   // bytes
+	VRAMTotal  float64 `json:"vramTotal"`  // bytes
+	MemoryUtil float64 `json:"memoryUtil"` // %
+	MaxTemp    float64 `json:"maxTemp"`    // throttle temperature threshold
 }
 
 // Disk holds a snapshot of one mounted filesystem + its IO rates.
@@ -99,6 +99,26 @@ type Net struct {
 	Up        bool    `json:"up"`
 }
 
+// VastRig is a read-only summary of one Vast.ai machine we host (from
+// `vastai show machines --raw`). Earnings/rates are what the host earns /
+// lists; contract end dates are the renter contracts (client) and the machine
+// listing (end). Never includes secrets or the machine's public IP.
+type VastRig struct {
+	ID             int     `json:"id"`
+	Hostname       string  `json:"hostname"`
+	GPUName        string  `json:"gpuName"`
+	NumGPUs        int     `json:"numGpus"`
+	ListedGPUCost  float64 `json:"listedGpuCost"` // $/h listed for the GPU
+	EarnHour       float64 `json:"earnHour"`      // $/h currently earned
+	EarnDay        float64 `json:"earnDay"`       // $/day currently earned
+	RentalsRunning int     `json:"rentalsRunning"`
+	ClientEndDate  float64 `json:"clientEndDate"` // unix seconds, 0 = none
+	EndDate        float64 `json:"endDate"`       // unix seconds, 0 = none
+	Verification   string  `json:"verification"`
+	Reliability    float64 `json:"reliability"` // 0..1
+	Geolocation    string  `json:"geolocation"`
+}
+
 // Snapshot is the complete telemetry picture for one poll tick.
 type Snapshot struct {
 	Time     time.Time `json:"time"`
@@ -110,6 +130,7 @@ type Snapshot struct {
 	Fans     []Fan     `json:"fans"`
 	Thermals []Thermal `json:"thermals"`
 	Extra    []Scalar  `json:"extra"`
+	VastRigs []VastRig `json:"vastRigs"`
 }
 
 // CPU holds CPU telemetry.

@@ -59,6 +59,20 @@ gpu:
   query: "nvidia-smi"
   query_interval: 1s
 
+# Read-only Vast.ai hosting telemetry (earnings, listed rate, rental count,
+# contract end dates). Requires the `vastai` CLI on the rig + your API key.
+vast:
+  # Set false to disable (widget shows "no data").
+  enabled: true
+  # Path to the vastai executable; use an absolute path if it is not on the
+  # service's PATH (e.g. /home/hedchr/.local/bin/vastai).
+  cli: "vastai"
+  # 0600 file (or env:VAR) with the Vast API key. Passed to the CLI only —
+  # never exposed by the app.
+  api_key_path: "/etc/fanctrl/vast_api_key"
+  # How often the CLI is invoked (default 60s).
+  interval: 60s
+
 thresholds:
   # Safety governor gates. When a hard temp is crossed the service reverts to
   # the "CPU" profile (or logs, if dry-run). Set hard > warn.

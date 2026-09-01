@@ -17,11 +17,11 @@ import (
 
 // Provider is a deterministic fake source.
 type Provider struct {
-	mu     sync.Mutex
-	start  time.Time
-	tick   int
-	Spike  bool // when true, temperatures ramp toward the hard limit
-	Now    func() time.Time
+	mu    sync.Mutex
+	start time.Time
+	tick  int
+	Spike bool // when true, temperatures ramp toward the hard limit
+	Now   func() time.Time
 }
 
 // NewProvider builds a mock provider.
@@ -140,6 +140,9 @@ func (p *Provider) Collect(_ context.Context) (metrics.Snapshot, error) {
 			{Name: "P_3V3", Value: 3.332, Unit: "V", Kind: metrics.KindVolts, Max: 3.8024, Min: 2.8028},
 			{Name: "P_5V_STBY", Value: 5.14, Unit: "V", Kind: metrics.KindVolts, Max: 5.775, Min: 4.235},
 			{Name: "Uptime", Value: now.Sub(p.start).Seconds(), Unit: "s", Kind: metrics.KindCount},
+		},
+		VastRigs: []metrics.VastRig{
+			{ID: 148260, Hostname: "endif01", GPUName: "RTX PRO 6000 WS", NumGPUs: 2, ListedGPUCost: 1.3, EarnHour: 1.87 + 0.15*math.Sin(float64(p.tick)/60), EarnDay: 44.9 + 3.6*math.Sin(float64(p.tick)/60), RentalsRunning: 2, ClientEndDate: float64(now.Add(36 * 24 * time.Hour).Unix()), EndDate: float64(now.Add(60 * 24 * time.Hour).Unix()), Verification: "verified", Reliability: 0.979, Geolocation: "Sweden, SE"},
 		},
 	}, nil
 }

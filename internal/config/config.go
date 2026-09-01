@@ -31,6 +31,9 @@ type Config struct {
 	BMC BMCConfig `yaml:"bmc"`
 	// GPU configures nvidia-smi usage.
 	GPU GPUConfig `yaml:"gpu"`
+	// Vast configures the read-only Vast.ai hosting telemetry (earnings,
+	// rental rate, contract end dates via `vastai show machines --raw`).
+	Vast VastConfig `yaml:"vast"`
 	// Thresholds defines warn + hard limits used by the governor.
 	Thresholds Thresholds `yaml:"thresholds"`
 	// History controls the on-disk ring buffer.
@@ -90,6 +93,19 @@ type GPUConfig struct {
 	QueryInterval time.Duration `yaml:"query_interval"`
 }
 
+// VastConfig configures the optional read-only Vast.ai hosting provider.
+type VastConfig struct {
+	// Enabled toggles the Vast.ai telemetry provider (earnings/rates/contracts).
+	Enabled bool `yaml:"enabled"`
+	// CLI is the vastai command (or absolute path) used to fetch machine data.
+	CLI string `yaml:"cli"`
+	// APIKeyPath is a 0600 file (or env:VAR) with the Vast API key. Passed to
+	// the CLI via VAST_API_KEY / --api-key; never served by the app.
+	APIKeyPath string `yaml:"api_key_path"`
+	// Interval throttles CLI invocations (default 60s).
+	Interval time.Duration `yaml:"interval"`
+}
+
 // Thresholds defines the safety limits.
 type Thresholds struct {
 	// GPUTempWarn and GPUTempHard are the temperature (C) gates for GPU.
@@ -116,21 +132,21 @@ type HistoryConfig struct {
 
 // WidgetLayout is the persisted default dashboard layout.
 type WidgetLayout struct {
-	Columns  int      `yaml:"columns"`
-	RowHeight int     `yaml:"row_height"`
-	Widgets  []Widget `yaml:"widgets"`
+	Columns   int      `yaml:"columns"`
+	RowHeight int      `yaml:"row_height"`
+	Widgets   []Widget `yaml:"widgets"`
 }
 
 // Widget describes one dashboard widget (type, position, optional config).
 type Widget struct {
-	ID    string  `yaml:"id"`
-	Type  string  `yaml:"type"` // cpu | gpu | disk | net | temps | fans | summary
-	X     int     `yaml:"x"`
-	Y     int     `yaml:"y"`
-	W     int     `yaml:"w"`
-	H     int     `yaml:"h"`
-	GPU   int     `yaml:"gpu,omitempty"` // which GPU index, for gpu widgets
-	Show  bool    `yaml:"show"`
+	ID   string `yaml:"id"`
+	Type string `yaml:"type"` // cpu | gpu | disk | net | temps | fans | summary
+	X    int    `yaml:"x"`
+	Y    int    `yaml:"y"`
+	W    int    `yaml:"w"`
+	H    int    `yaml:"h"`
+	GPU  int    `yaml:"gpu,omitempty"` // which GPU index, for gpu widgets
+	Show bool   `yaml:"show"`
 }
 
 // Default returns a sane default configuration, matching the recommended plan.
@@ -142,7 +158,7 @@ func Default() Config {
 		DryRun:       true, // safety: never write until explicitly enabled
 		ReadOnly:     false,
 		Auth: AuthConfig{
-			Enabled:   true,
+			Enabled:    true,
 			SessionTTL: 24 * time.Hour,
 		},
 		BMC: BMCConfig{
@@ -153,13 +169,18 @@ func Default() Config {
 			Query:         "nvidia-smi",
 			QueryInterval: time.Second,
 		},
+		Vast: VastConfig{
+			Enabled:  false,
+			CLI:      "vastai",
+			Interval: time.Minute,
+		},
 		Thresholds: Thresholds{
-			GPUTempWarn: 82,
-			GPUTempHard: 88,
-			CPUTempWarn: 78,
-			CPUTempHard: 92,
+			GPUTempWarn:  82,
+			GPUTempHard:  88,
+			CPUTempWarn:  78,
+			CPUTempHard:  92,
 			DiskUsedWarn: 90,
-			Cooldown:    5 * time.Minute,
+			Cooldown:     5 * time.Minute,
 		},
 		History: HistoryConfig{
 			Enabled:  true,

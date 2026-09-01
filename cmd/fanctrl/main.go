@@ -26,6 +26,7 @@ import (
 	"github.com/hedchr/fanctrl/internal/providers/host"
 	"github.com/hedchr/fanctrl/internal/providers/mock"
 	"github.com/hedchr/fanctrl/internal/providers/redfish"
+	"github.com/hedchr/fanctrl/internal/providers/vast"
 	"github.com/hedchr/fanctrl/internal/server"
 	"github.com/hedchr/fanctrl/web"
 )
@@ -106,12 +107,21 @@ func main() {
 			ami := redfish.NewAMIClient(cfg.BMC.URL, cfg.BMC.Username, pass, cfg.BMC.InsecureTLS)
 			providers = append(providers, ami)
 		}
+		// Optional read-only Vast.ai hosting telemetry (earnings/rates/contracts).
+		if cfg.Vast.Enabled {
+			vastP := vast.NewProvider(vast.Options{
+				CLI:        cfg.Vast.CLI,
+				APIKeyPath: cfg.Vast.APIKeyPath,
+				Interval:   cfg.Vast.Interval,
+			})
+			providers = append(providers, vastP)
+		}
 		// Compose the controller: BMC for profiles/duty, GPU for GPU fans.
 		ctrl = composite.New(bmcCtl, gpuCtl)
 		if bmcCtl == nil && gpuCtl == nil {
 			log.Warn("no BMC or GPU control configured; control endpoints will report unavailable")
 		}
-		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "")
+		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "", "vast", cfg.Vast.Enabled)
 	}
 
 	// --- History ring ---

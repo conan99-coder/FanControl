@@ -34,6 +34,9 @@ gives you one dashboard for all of it.
   - **Temperature history graph** (Temp graph widget): multi-sensor time-series
     of the same BMC thermal sensors, click-to-toggle legend to hide sensors you
     don't care about (persisted per browser)
+  - **Vast rigs widget** (read-only): earnings ($/h, $/day, ~$/week), listed
+    rate, running rentals, renter-contract + listing end dates per machine,
+    via the `vastai` CLI on the rig (API key stays in a 0600 file)
 - **Real hardware telemetry**:
   - Host: CPU load/temp, memory, disk usage + IO rates, network (from `/proc`,
     `/sysfs`)
@@ -256,3 +259,13 @@ MIT — see the LICENSE file.
 - Curve editor (if a BMC variant supports profile writes)
 - Persistent server-side widget layout
 - Alert notifications (webhook/ntfy) on threshold breaches
+- **Uniform widget sizing** (design note — more thought needed before implementing):
+  - Widget height = header + N × a single label-row unit, so a 1-row widget is
+    one fixed label row, a 2-row widget is exactly double, 3-row exactly triple.
+    Goal: widgets snap cleanly to their smallest sensible size with no empty
+    space and no scrollbars; one uniform label size everywhere.
+  - **Graphs are the exception** — they just scale freely to the widget size.
+  - Open points to settle first: base label-row height (keep today's ~12px
+    labels vs taller rows); how the temp-graph legend behaves (fixed band vs
+    rows counted into the total); and whether each widget gets a natural
+    minimum height (e.g. fans = 10 rows) vs freely resizable.
