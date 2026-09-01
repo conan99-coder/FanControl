@@ -6,6 +6,14 @@ export interface Capabilities {
   gpuFanControl: boolean
 }
 
+export interface Thresholds {
+  gpuTempWarn: number
+  gpuTempHard: number
+  cpuTempWarn: number
+  cpuTempHard: number
+  diskUsedWarn: number
+}
+
 export interface Status {
   read_only: boolean
   dry_run: boolean
@@ -13,6 +21,7 @@ export interface Status {
   governor_tripped: boolean
   governor_reason?: string
   capabilities?: Capabilities
+  thresholds?: Thresholds
 }
 
 // api wires the fetch calls. Auth uses an HttpOnly cookie (set by /api/login),

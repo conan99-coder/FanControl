@@ -85,11 +85,15 @@ function LineChart({
   ids,
   hidden,
   colors,
+  warn,
+  hard,
 }: {
   pts: Pt[]
   ids: string[]
   hidden: Set<string>
   colors: Map<string, string>
+  warn?: number
+  hard?: number
 }) {
   const clipId = useId()
   const [ref, size] = useSize()
@@ -125,10 +129,11 @@ function LineChart({
     )
   }
 
-  // Fixed range 0-100°C so the graph is comparable over time.
-  const dmin = 0
+  // Fixed range 30-100°C (temps below 30 are not expected): the graph stays
+  // comparable over time.
+  const dmin = 30
   const dmax = 100
-  const ticks = [0, 25, 50, 75, 100]
+  const ticks = [30, 50, 70, 90, 100]
 
   const spanT = Math.max(tMax - tMin, 1)
   const spanV = dmax - dmin || 1
@@ -163,6 +168,19 @@ function LineChart({
             <rect x={M.l} y={M.t} width={plotW} height={plotH} />
           </clipPath>
         </defs>
+        {/* threshold background bands: safe (green) -> warn (yellow) -> hard
+            (red). Low opacity so the temperature lines stay readable. */}
+        <g clipPath={`url(#${clipId})`}>
+          {warn != null && warn > dmin && warn <= dmax && (
+            <rect x={M.l} y={yFor(dmin)} width={plotW} height={Math.max(0, yFor(warn) - yFor(dmin))} fill="var(--ok)" opacity={0.12} />
+          )}
+          {warn != null && hard != null && hard > warn && warn < dmax && (
+            <rect x={M.l} y={yFor(warn)} width={plotW} height={yFor(hard) - yFor(warn)} fill="var(--warn)" opacity={0.2} />
+          )}
+          {hard != null && hard > dmin && hard < dmax && (
+            <rect x={M.l} y={yFor(hard)} width={plotW} height={yFor(dmax) - yFor(hard)} fill="var(--danger)" opacity={0.22} />
+          )}
+        </g>
         {/* horizontal grid + y labels */}
         {ticks.map((v) => (
           <g key={v}>
@@ -176,6 +194,23 @@ function LineChart({
         <text x={xFor(tMin)} y={H - 5} fontSize={9} fill="var(--text-faint)">{fmtTime(tMin)}</text>
         <text x={xFor(midT)} y={H - 5} textAnchor="middle" fontSize={9} fill="var(--text-faint)">{fmtTime(midT)}</text>
         <text x={xFor(tMax)} y={H - 5} textAnchor="end" fontSize={9} fill="var(--text-faint)">{fmtTime(tMax)}</text>
+        {/* threshold lines (warn yellow / hard red) */}
+        {warn != null && warn > dmin && warn < dmax && (
+          <g>
+            <line x1={M.l} x2={W - M.r} y1={yFor(warn)} y2={yFor(warn)} stroke="var(--warn)" strokeOpacity={0.85} strokeWidth={1} strokeDasharray="6 4" />
+            <text x={W - M.r} y={yFor(warn) - 4} textAnchor="end" fontSize={9} fill="var(--warn)">
+              warn {Math.round(warn)}°
+            </text>
+          </g>
+        )}
+        {hard != null && hard > dmin && hard < dmax && (
+          <g>
+            <line x1={M.l} x2={W - M.r} y1={yFor(hard)} y2={yFor(hard)} stroke="var(--danger)" strokeOpacity={0.85} strokeWidth={1} strokeDasharray="6 4" />
+            <text x={W - M.r} y={yFor(hard) - 4} textAnchor="end" fontSize={9} fill="var(--danger)">
+              hard {Math.round(hard)}°
+            </text>
+          </g>
+        )}
         {/* traces */}
         <g clipPath={`url(#${clipId})`}>
           {traces.map((tr) => {
@@ -207,10 +242,12 @@ export function TempsGraphWidget({
   snap,
   edit,
   rowsCfg,
+  thresholds,
 }: {
   snap: Snapshot
   edit?: boolean
   rowsCfg?: RowCfg
+  thresholds?: { gpuTempWarn: number; gpuTempHard: number; cpuTempWarn: number; cpuTempHard: number }
 }) {
   const bufRef = useRef<Pt[]>([])
   const [buf, setBuf] = useState<Pt[]>([])
@@ -370,6 +407,8 @@ export function TempsGraphWidget({
               ids={thermals.filter((t) => !hidden.has(String(t.id))).map((t) => String(t.id))}
               hidden={lines}
               colors={colors}
+              warn={thresholds?.gpuTempWarn}
+              hard={thresholds?.gpuTempHard}
             />
           </div>
         </div>

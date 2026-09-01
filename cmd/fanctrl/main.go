@@ -22,6 +22,7 @@ import (
 	"github.com/hedchr/fanctrl/internal/metrics"
 	"github.com/hedchr/fanctrl/internal/poller"
 	"github.com/hedchr/fanctrl/internal/providers/composite"
+	"github.com/hedchr/fanctrl/internal/providers/docker"
 	"github.com/hedchr/fanctrl/internal/providers/gpu"
 	"github.com/hedchr/fanctrl/internal/providers/host"
 	"github.com/hedchr/fanctrl/internal/providers/mock"
@@ -116,12 +117,20 @@ func main() {
 			})
 			providers = append(providers, vastP)
 		}
+		// Optional read-only Docker container metadata (renters' instances).
+		if cfg.Docker.Enabled {
+			dk := docker.NewProvider(docker.Options{
+				CLI:      cfg.Docker.CLI,
+				Interval: cfg.Docker.Interval,
+			})
+			providers = append(providers, dk)
+		}
 		// Compose the controller: BMC for profiles/duty, GPU for GPU fans.
 		ctrl = composite.New(bmcCtl, gpuCtl)
 		if bmcCtl == nil && gpuCtl == nil {
 			log.Warn("no BMC or GPU control configured; control endpoints will report unavailable")
 		}
-		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "", "vast", cfg.Vast.Enabled)
+		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "", "vast", cfg.Vast.Enabled, "docker", cfg.Docker.Enabled)
 	}
 
 	// --- History ring ---

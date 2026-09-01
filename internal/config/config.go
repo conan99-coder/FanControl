@@ -34,6 +34,9 @@ type Config struct {
 	// Vast configures the read-only Vast.ai hosting telemetry (earnings,
 	// rental rate, contract end dates via `vastai show machines --raw`).
 	Vast VastConfig `yaml:"vast"`
+	// Docker configures the read-only container metadata provider
+	// (names/images/status/CPU-mem of the renters' containers).
+	Docker DockerConfig `yaml:"docker"`
 	// Thresholds defines warn + hard limits used by the governor.
 	Thresholds Thresholds `yaml:"thresholds"`
 	// History controls the on-disk ring buffer.
@@ -106,18 +109,30 @@ type VastConfig struct {
 	Interval time.Duration `yaml:"interval"`
 }
 
-// Thresholds defines the safety limits.
+// DockerConfig configures the optional read-only Docker container provider.
+// It collects metadata only (name, image, status, CPU/mem) — never container
+// contents or logs (tenant data).
+type DockerConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// CLI is the docker command (or absolute path). Default "docker".
+	CLI string `yaml:"cli"`
+	// Interval throttles CLI invocations (default 30s).
+	Interval time.Duration `yaml:"interval"`
+}
+
+// Thresholds defines the safety limits (also exposed to the UI via /api/status
+// so charts can draw warn/hard lines).
 type Thresholds struct {
 	// GPUTempWarn and GPUTempHard are the temperature (C) gates for GPU.
-	GPUTempWarn float64 `yaml:"gpu_temp_warn"`
-	GPUTempHard float64 `yaml:"gpu_temp_hard"`
+	GPUTempWarn float64 `yaml:"gpu_temp_warn" json:"gpuTempWarn"`
+	GPUTempHard float64 `yaml:"gpu_temp_hard" json:"gpuTempHard"`
 	// CPUTempWarn / CPUTempHard are the CPU gates.
-	CPUTempWarn float64 `yaml:"cpu_temp_warn"`
-	CPUTempHard float64 `yaml:"cpu_temp_hard"`
+	CPUTempWarn float64 `yaml:"cpu_temp_warn" json:"cpuTempWarn"`
+	CPUTempHard float64 `yaml:"cpu_temp_hard" json:"cpuTempHard"`
 	// DiskUsedWarn is the %-full gate for disk warnings.
-	DiskUsedWarn float64 `yaml:"disk_used_warn"`
+	DiskUsedWarn float64 `yaml:"disk_used_warn" json:"diskUsedWarn"`
 	// AfterHardTemp, the governor reverts to the safe profile for this long.
-	Cooldown time.Duration `yaml:"cooldown"`
+	Cooldown time.Duration `yaml:"cooldown" json:"-"`
 }
 
 // HistoryConfig controls the on-disk ring buffer.
@@ -173,6 +188,11 @@ func Default() Config {
 			Enabled:  false,
 			CLI:      "vastai",
 			Interval: time.Minute,
+		},
+		Docker: DockerConfig{
+			Enabled:  false,
+			CLI:      "docker",
+			Interval: 30 * time.Second,
 		},
 		Thresholds: Thresholds{
 			GPUTempWarn:  82,

@@ -7,12 +7,14 @@ export function WidgetShell({
   title,
   icon,
   warn,
+  warnSoft,
   children,
   action,
 }: {
   title: string
   icon?: ReactNode
   warn?: string
+  warnSoft?: string
   children: ReactNode
   action?: ReactNode
 }) {
@@ -26,8 +28,9 @@ export function WidgetShell({
           <span className="label">{title}</span>
         </div>
         <div className="flex items-center gap-2 cursor-default">
+          {warnSoft && <span className="pill pill-warn text-[9px] leading-none px-1.5 py-0.5">{warnSoft}</span>}
           {warn && (
-            <span className="pill pill-danger animate-pulse-danger">{warn}</span>
+            <span className="pill pill-danger animate-pulse-danger text-[9px] leading-none px-1.5 py-0.5">{warn}</span>
           )}
           {action}
         </div>

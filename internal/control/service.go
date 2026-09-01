@@ -15,15 +15,15 @@ import (
 // Service orchestrates control actions with safety gates.
 type Service struct {
 	// ctrl is the underlying controller (real or mock).
-	ctrl     metrics.Controller
+	ctrl metrics.Controller
 	// poller gives access to the latest snapshot and governor.
-	p     *poller.Poller
-	dry   bool
-	ro    bool
-	mu    sync.RWMutex
+	p       *poller.Poller
+	dry     bool
+	ro      bool
+	mu      sync.RWMutex
 	monitor bool // true => Monitor mode (writes refused); default ON
-	log   *slog.Logger
-	audit *AuditLog
+	log     *slog.Logger
+	audit   *AuditLog
 }
 
 // Options configures the Service.
@@ -177,6 +177,7 @@ func (s *Service) Status() Status {
 		GovernorReason:  reason,
 		GovernorTime:    when,
 		Capabilities:    s.ctrl.Capabilities(),
+		Thresholds:      s.p.Thresholds(),
 	}
 }
 

@@ -1,9 +1,10 @@
 import type { Snapshot } from '../types'
+import type { Thresholds } from '../api'
 import { WidgetShell, warnIf } from './shell'
 import { Bar, Metric } from './CpuWidget'
 import { formatBytes } from '../types'
 
-export function GpuWidget({ snap, index }: { snap: Snapshot; index: number }) {
+export function GpuWidget({ snap, index, thresholds }: { snap: Snapshot; index: number; thresholds?: Thresholds }) {
   const gpu = snap.gpus?.find((g) => g.index === index)
   if (!gpu) {
     return (
@@ -12,12 +13,24 @@ export function GpuWidget({ snap, index }: { snap: Snapshot; index: number }) {
       </WidgetShell>
     )
   }
-  const warn = warnIf(gpu.temp, gpu.maxTemp, 'GPU')
+  // Warning state from the config thresholds when available; fall back to the
+  // card's own maxTemp otherwise.
+  const warnAt = thresholds?.gpuTempWarn
+  const hardAt = thresholds?.gpuTempHard
+  let warn: string | undefined
+  let warnSoft: string | undefined
+  if (hardAt != null && gpu.temp >= hardAt) {
+    warn = `hard ${Math.round(gpu.temp)}°`
+  } else if (warnAt != null && gpu.temp >= warnAt) {
+    warnSoft = `warn ${Math.round(gpu.temp)}°`
+  } else if (warnAt == null && hardAt == null) {
+    warn = warnIf(gpu.temp, gpu.maxTemp, 'GPU')
+  }
   const utilPct = gpu.util ?? 0
   const vramPct = gpu.vramTotal ? (gpu.vramUsed / gpu.vramTotal) * 100 : 0
 
   return (
-    <WidgetShell title={`GPU ${index} — ${gpu.name}`} warn={warn}>
+    <WidgetShell title={`GPU ${index} — ${gpu.name}`} warn={warn} warnSoft={warnSoft}>
       <div className="space-y-3">
         <div className="flex justify-between items-baseline">
           <span className="mono text-3xl font-semibold text-(--accent)">

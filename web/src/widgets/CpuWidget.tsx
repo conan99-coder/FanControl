@@ -1,16 +1,32 @@
 import type { Snapshot } from '../types'
+import type { Thresholds } from '../api'
 import { WidgetShell, warnIf } from './shell'
 import { formatBytes } from '../types'
 
-export function CpuWidget({ snap }: { snap: Snapshot }) {
+export function CpuWidget({ snap, thresholds }: { snap: Snapshot; thresholds?: Thresholds }) {
   const cpu = snap.cpu ?? {}
   const load = cpu.loadPct ?? 0
   const memPct = cpu.memTotal ? (cpu.memUsed ?? 0) / cpu.memTotal * 100 : 0
-  const warn = warnIf(cpu.cpuTemp ?? 0, cpu.cpuTempMax ?? 0, 'CPU')
+  // Warning state from the config thresholds when available (and a real temp
+  // is reported); fall back to the driver's cpuTempMax otherwise.
+  const cpuTemp = cpu.cpuTemp ?? 0
+  const warnAt = thresholds?.cpuTempWarn
+  const hardAt = thresholds?.cpuTempHard
+  let warn: string | undefined
+  let warnSoft: string | undefined
+  if (cpuTemp > 0) {
+    if (hardAt != null && cpuTemp >= hardAt) {
+      warn = `hard ${Math.round(cpuTemp)}°`
+    } else if (warnAt != null && cpuTemp >= warnAt) {
+      warnSoft = `warn ${Math.round(cpuTemp)}°`
+    }
+  } else if (cpu.cpuTempMax != null && cpu.cpuTempMax > 0) {
+    warn = warnIf(cpu.cpuTemp ?? 0, cpu.cpuTempMax, 'CPU')
+  }
   const perCore = cpu.perCoreLoad ?? []
 
   return (
-    <WidgetShell title="CPU" warn={warn}>
+    <WidgetShell title="CPU" warn={warn} warnSoft={warnSoft}>
       <div className="space-y-3">
         <div className="flex justify-between items-baseline">
           <span className="mono text-3xl font-semibold text-(--accent)">

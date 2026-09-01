@@ -119,18 +119,33 @@ type VastRig struct {
 	Geolocation    string  `json:"geolocation"`
 }
 
+// Container is a read-only summary of one Docker container on the rig — the
+// renters' Vast instances are containers named C.<instance_id>. Metadata only
+// (name, image/template, status, CPU/mem); never touches container contents,
+// files, or logs (tenant data).
+type Container struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Image         string  `json:"image"`
+	Status        string  `json:"status"` // e.g. "Up 36 hours"
+	CPUsPct       float64 `json:"cpusPct"`
+	MemUsedBytes  float64 `json:"memUsedBytes"`
+	MemTotalBytes float64 `json:"memTotalBytes"` // 0 if unknown
+}
+
 // Snapshot is the complete telemetry picture for one poll tick.
 type Snapshot struct {
-	Time     time.Time `json:"time"`
-	CPU      CPU       `json:"cpu"`
-	GPUs     []GPU     `json:"gpus"`
-	Disks    []Disk    `json:"disks"`
-	Drives   []Drive   `json:"drives"`
-	Nets     []Net     `json:"nets"`
-	Fans     []Fan     `json:"fans"`
-	Thermals []Thermal `json:"thermals"`
-	Extra    []Scalar  `json:"extra"`
-	VastRigs []VastRig `json:"vastRigs"`
+	Time       time.Time   `json:"time"`
+	CPU        CPU         `json:"cpu"`
+	GPUs       []GPU       `json:"gpus"`
+	Disks      []Disk      `json:"disks"`
+	Drives     []Drive     `json:"drives"`
+	Nets       []Net       `json:"nets"`
+	Fans       []Fan       `json:"fans"`
+	Thermals   []Thermal   `json:"thermals"`
+	Extra      []Scalar    `json:"extra"`
+	VastRigs   []VastRig   `json:"vastRigs"`
+	Containers []Container `json:"containers"`
 }
 
 // CPU holds CPU telemetry.

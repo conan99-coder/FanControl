@@ -98,6 +98,16 @@ export interface VastRig {
   geolocation: string
 }
 
+export interface Container {
+  id: string
+  name: string
+  image: string
+  status: string
+  cpusPct: number
+  memUsedBytes: number
+  memTotalBytes: number
+}
+
 export interface Snapshot {
   time: string
   cpu: Partial<CPU>
@@ -109,6 +119,7 @@ export interface Snapshot {
   thermals: Thermal[]
   extra: Scalar[]
   vastRigs?: VastRig[]
+  containers?: Container[]
 }
 
 export interface Policy {

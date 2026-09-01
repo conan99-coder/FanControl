@@ -73,6 +73,17 @@ vast:
   # How often the CLI is invoked (default 60s).
   interval: 60s
 
+# Read-only Docker container metadata (renters' instances on the rig):
+# names, images/templates, status, CPU/mem. Never touches container contents
+# or logs (tenant data).
+docker:
+  # Set false to disable (widget shows "no data").
+  enabled: true
+  # Path to the docker CLI; default "docker".
+  cli: "docker"
+  # How often the CLI is invoked (default 30s).
+  interval: 30s
+
 thresholds:
   # Safety governor gates. When a hard temp is crossed the service reverts to
   # the "CPU" profile (or logs, if dry-run). Set hard > warn.

@@ -135,6 +135,9 @@ func merge(dst *metrics.Snapshot, src metrics.Snapshot) {
 	if len(src.VastRigs) > 0 {
 		dst.VastRigs = src.VastRigs
 	}
+	if src.Containers != nil {
+		dst.Containers = src.Containers
+	}
 	if src.Time.After(dst.Time) {
 		dst.Time = src.Time
 	}
@@ -191,4 +194,9 @@ func (p *Poller) Discovery(ctx context.Context) []metrics.Discovery {
 // Governor returns the safety governor for control-side integration.
 func (p *Poller) Governor() *governor {
 	return p.governor
+}
+
+// Thresholds returns the configured safety thresholds.
+func (p *Poller) Thresholds() config.Thresholds {
+	return p.cfg
 }

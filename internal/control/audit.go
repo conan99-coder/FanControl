@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hedchr/fanctrl/internal/config"
 	"github.com/hedchr/fanctrl/internal/metrics"
 )
 
@@ -20,13 +21,16 @@ var errGPUFanLocked = errors.New("GPU fan control not available on this card")
 
 // Status is the dynamic state reported to the UI.
 type Status struct {
-	ReadOnly        bool                `json:"read_only"`
-	DryRun          bool                `json:"dry_run"`
-	Monitor         bool                `json:"monitor"`
-	GovernorTripped bool                `json:"governor_tripped"`
-	GovernorReason  string              `json:"governor_reason,omitempty"`
-	GovernorTime    time.Time           `json:"governor_time,omitempty"`
+	ReadOnly        bool                 `json:"read_only"`
+	DryRun          bool                 `json:"dry_run"`
+	Monitor         bool                 `json:"monitor"`
+	GovernorTripped bool                 `json:"governor_tripped"`
+	GovernorReason  string               `json:"governor_reason,omitempty"`
+	GovernorTime    time.Time            `json:"governor_time,omitempty"`
 	Capabilities    metrics.Capabilities `json:"capabilities"`
+	// Thresholds exposes the configured safety limits so the UI can draw
+	// warn/hard lines on charts.
+	Thresholds config.Thresholds `json:"thresholds"`
 }
 
 // AuditEntry is a single fan-control action record.

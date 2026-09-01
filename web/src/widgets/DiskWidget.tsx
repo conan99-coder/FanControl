@@ -1,5 +1,6 @@
 import type { Snapshot } from '../types'
 import type { RowCfg } from '../rowconfig'
+import type { Thresholds } from '../api'
 import { WidgetShell } from './shell'
 import { Bar } from './CpuWidget'
 import { formatBytes, formatRate } from '../types'
@@ -12,14 +13,17 @@ export function DiskWidget({
   edit,
   rowsCfg,
   onRowCfg,
+  thresholds,
 }: {
   snap: Snapshot
   edit?: boolean
   rowsCfg?: RowCfg
   onRowCfg?: (c: RowCfg) => void
+  thresholds?: Thresholds
 }) {
   const disks = snap.disks ?? []
   const cfg = rowsCfg ?? { hidden: {}, names: {}, order: [] }
+  const warnPct = thresholds?.diskUsedWarn ?? 90
   return (
     <WidgetShell title="Disk volumes">
       {disks.length === 0 ? (
@@ -33,7 +37,7 @@ export function DiskWidget({
           render={(id) => {
             const d = disks.find((x) => x.mount === id)!
             const usedPct = d.totalBytes ? ((d.totalBytes - d.freeBytes) / d.totalBytes) * 100 : 0
-            const warn = usedPct > 90
+            const warn = usedPct > warnPct
             return (
               <div className="rounded-lg bg-(--bg-panel-2) p-2">
                 <div className="flex justify-between items-baseline">

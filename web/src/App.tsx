@@ -22,9 +22,10 @@ import { VoltsWidget } from './widgets/VoltsWidget'
 import { TempsWidget } from './widgets/TempsWidget'
 import { TempsGraphWidget } from './widgets/TempsGraphWidget'
 import { VastWidget } from './widgets/VastWidget'
+import { DockerWidget } from './widgets/DockerWidget'
 import { FansWidget } from './widgets/FansWidget'
 
-export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast'
+export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast' | 'docker'
 
 interface WidgetDef {
   id: string
@@ -147,6 +148,7 @@ export default function App() {
     { id: 'net', type: 'net' },
     { id: 'volts', type: 'volts' },
     { id: 'vast', type: 'vast' },
+    { id: 'docker', type: 'docker' },
   ]
 
   // Initialize gridstack once the grid div is actually in the DOM (i.e. after
@@ -259,6 +261,7 @@ export default function App() {
       { id: 'volts', x: 0, y: 16, w: 6, h: 2 },
       { id: 'net', x: 6, y: 16, w: 6, h: 2 },
       { id: 'vast', x: 0, y: 18, w: 6, h: 4 },
+      { id: 'docker', x: 6, y: 18, w: 6, h: 4 },
     ]
   }
 
@@ -288,11 +291,11 @@ export default function App() {
       case 'summary':
         return <SummaryWidget snap={snap} series={history} />
       case 'cpu':
-        return <CpuWidget snap={snap} />
+        return <CpuWidget snap={snap} thresholds={status?.thresholds} />
       case 'gpu':
-        return <GpuWidget snap={snap} index={w.gpu ?? 0} />
+        return <GpuWidget snap={snap} index={w.gpu ?? 0} thresholds={status?.thresholds} />
       case 'disk':
-        return <DiskWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'disk')} onRowCfg={(c) => setRowCfg('disk', c)} />
+        return <DiskWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'disk')} onRowCfg={(c) => setRowCfg('disk', c)} thresholds={status?.thresholds} />
       case 'drives':
         return <DrivesWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'drives')} onRowCfg={(c) => setRowCfg('drives', c)} />
       case 'volts':
@@ -302,11 +305,20 @@ export default function App() {
       case 'temps':
         return <TempsWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} onRowCfg={(c) => setRowCfg('temps', c)} />
       case 'tempsgraph':
-        return <TempsGraphWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'temps')} />
+        return (
+          <TempsGraphWidget
+            snap={snap}
+            edit={editMode}
+            rowsCfg={cfgFor(rowsCfg, 'temps')}
+            thresholds={status?.thresholds}
+          />
+        )
       case 'fans':
         return <FansWidget snap={snap} admin={admin} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} monitor={monitor} dutyOverride={status?.capabilities?.dutyOverride ?? true} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'fans')} onRowCfg={(c) => setRowCfg('fans', c)} />
       case 'vast':
         return <VastWidget snap={snap} />
+      case 'docker':
+        return <DockerWidget snap={snap} />
       default:
         return null
     }

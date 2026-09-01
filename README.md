@@ -37,6 +37,9 @@ gives you one dashboard for all of it.
   - **Vast rigs widget** (read-only): earnings ($/h, $/day, ~$/week), listed
     rate, running rentals, renter-contract + listing end dates per machine,
     via the `vastai` CLI on the rig (API key stays in a 0600 file)
+  - **Docker instances widget** (read-only): the renters' containers on the rig
+    — name (C.&lt;instance_id&gt;), image/template, status, CPU/mem. Metadata
+    only; never touches container contents or logs
 - **Real hardware telemetry**:
   - Host: CPU load/temp, memory, disk usage + IO rates, network (from `/proc`,
     `/sysfs`)
