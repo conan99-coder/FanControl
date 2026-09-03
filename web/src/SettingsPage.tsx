@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Settings, SettingsUser, Sources } from './api'
+import type { WidgetPrefs } from './rowconfig'
 import * as api from './api'
 
 // SettingsPage is the full configuration editor: every config feature is
@@ -19,7 +20,17 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'widgets', label: 'Widgets' },
 ]
 
-export function SettingsPage({ onClose, sources }: { onClose: () => void; sources?: Sources }) {
+export function SettingsPage({
+  onClose,
+  sources,
+  widgetPrefs,
+  onWidgetPrefs,
+}: {
+  onClose: () => void
+  sources?: Sources
+  widgetPrefs?: WidgetPrefs
+  onWidgetPrefs?: (p: WidgetPrefs) => void
+}) {
   const [tab, setTab] = useState<Tab>('general')
   const [form, setForm] = useState<Settings | null>(null)
   const [msg, setMsg] = useState('')
@@ -56,7 +67,8 @@ export function SettingsPage({ onClose, sources }: { onClose: () => void; source
     setBusy(true)
     setErr('')
     setMsg('')
-    const { configPath, bmcHasPassword, vastHasKey, ...payload } = form
+    // Widget toggles are per-device (localStorage) and intentionally excluded.
+    const { configPath, bmcHasPassword, vastHasKey, widgets, ...payload } = form
     try {
       const res = await api.updateSettings(payload)
       setForm(res)
@@ -278,26 +290,38 @@ export function SettingsPage({ onClose, sources }: { onClose: () => void; source
         {tab === 'widgets' && (
           <div className="space-y-1">
             <div className="text-xs text-(--text-faint) mb-2">
-              Toggle which widgets appear on the dashboard. Widgets whose data source is disabled are hidden automatically.
+              These toggles are <b>per this device</b> (stored in the browser) — each computer/phone gets its own dashboard.
+              Widgets whose data source is disabled are hidden automatically.
+            </div>
+            <div className="mb-2">
+              <button
+                className={btn}
+                onClick={() => onWidgetPrefs?.({})}
+                title="Clear this device's overrides and use the server defaults"
+              >
+                Reset to server defaults
+              </button>
             </div>
             {form.widgets.map((w, i) => {
               const source = sourceFor(w.type)
               const disabled = source != null && sources != null && !sources[source]
+              const checked = widgetPrefs && w.type in widgetPrefs ? !!widgetPrefs[w.type] : w.show
               return (
                 <div key={w.type + '-' + i} className="flex items-center justify-between rounded-lg bg-(--bg-panel-2) px-3 py-2">
                   <div>
                     <div className="text-xs text-(--text)">{labelFor(w.type)}</div>
                     <div className="text-[10px] text-(--text-faint)">
-                      {disabled ? `disabled — source off (${source})` : w.show ? 'visible' : 'hidden'}
+                      {disabled ? `disabled — source off (${source})` : checked ? 'visible on this device' : 'hidden on this device'}
                     </div>
                   </div>
                   <input
                     type="checkbox"
                     disabled={disabled}
-                    checked={w.show && !disabled}
+                    checked={checked && !disabled}
                     onChange={(e) => {
-                      const widgets = form.widgets.map((x) => (x.type === w.type ? { ...x, show: e.target.checked } : x))
-                      up({ widgets })
+                      const prefs = { ...(widgetPrefs ?? {}) }
+                      prefs[w.type] = e.target.checked
+                      onWidgetPrefs?.(prefs)
                     }}
                   />
                 </div>

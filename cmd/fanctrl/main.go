@@ -166,7 +166,10 @@ func buildProviders(cfg config.Config, log *slog.Logger) ([]metrics.Provider, me
 	default: // real
 		hostP := host.NewProvider(0)
 		providers = append(providers, hostP)
-		var gpuCtl *gpu.Controller
+		// NOTE: declare as the interface so an unset controller is a true nil
+		// (a typed nil *gpu.Controller would still satisfy the interface and
+		// crash on method calls).
+		var gpuCtl metrics.Controller
 		if cfg.GPU.Enabled {
 			providers = append(providers, gpu.NewProvider(cfg.GPU.Query))
 			// Detect GPU fan-control capability (probes fan.speed readability).

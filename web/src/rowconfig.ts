@@ -65,3 +65,32 @@ export function displayName(cfg: RowCfg, id: string, fallback: string): string {
   const n = cfg.names[id]
   return n && n.trim() ? n : fallback
 }
+
+// ---- Per-device widget visibility (localStorage) ----
+// Widget on/off preferences are per browser/device (phone, work computer,
+// private machine). The server keeps only the capability rule (source off =>
+// hidden everywhere); these preferences fall back to the server defaults when
+// unset for a widget type.
+
+const WIDGET_KEY = 'fc-widgets'
+
+export type WidgetPrefs = Record<string, boolean>
+
+export function loadWidgetPrefs(): WidgetPrefs {
+  try {
+    const raw = localStorage.getItem(WIDGET_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed !== null ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveWidgetPrefs(prefs: WidgetPrefs) {
+  try {
+    localStorage.setItem(WIDGET_KEY, JSON.stringify(prefs))
+  } catch {
+    // best-effort persistence
+  }
+}

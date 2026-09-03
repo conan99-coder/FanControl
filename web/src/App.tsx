@@ -11,8 +11,8 @@ import { Login } from './Login'
 import { ErrorBoundary } from './ErrorBoundary'
 import { SettingsPage } from './SettingsPage'
 import * as api from './api'
-import type { RowConfigs, RowCfg } from './rowconfig'
-import { loadRowConfigs, saveRowConfigs, cfgFor } from './rowconfig'
+import type { RowConfigs, RowCfg, WidgetPrefs } from './rowconfig'
+import { loadRowConfigs, saveRowConfigs, cfgFor, loadWidgetPrefs, saveWidgetPrefs } from './rowconfig'
 import { SummaryWidget } from './widgets/SummaryWidget'
 import { CpuWidget } from './widgets/CpuWidget'
 import { GpuWidget } from './widgets/GpuWidget'
@@ -52,6 +52,7 @@ export default function App() {
   const [modeBusy, setModeBusy] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [rowsCfg, setRowsCfg] = useState<RowConfigs>(() => loadRowConfigs())
+  const [widgetPrefs, setWidgetPrefs] = useState<WidgetPrefs>(() => loadWidgetPrefs())
   const gridRef = useRef<HTMLDivElement>(null)
   const gsRef = useRef<GridStack | null>(null)
   const historyRef = useRef<(number | null)[]>([])
@@ -161,17 +162,23 @@ export default function App() {
   ]
 
   // Visible widgets: hidden when their data source is disabled (no BMC => no
-  // temps/fans/volts, no empty boxes) or when the operator toggled them off
-  // in the settings page (server config).
+  // temps/fans/volts, no empty boxes). Show/hide preference is PER DEVICE
+  // (localStorage fc-widgets), falling back to the server config defaults.
   const sources = status?.sources
-  const widgetShow = new Map((status?.widgets ?? []).map((w) => [w.type, w.show]))
+  const serverWidgetShow = new Map((status?.widgets ?? []).map((w) => [w.type, w.show]))
   const visibleWidgets = widgets.filter((w) => {
     const src = sourceFor(w.type)
     if (src && sources && !sources[src]) return false
-    if (widgetShow.get(w.type) === false) return false
+    if (w.type in widgetPrefs) return widgetPrefs[w.type]
+    if (serverWidgetShow.get(w.type) === false) return false
     return true
   })
   const widgetKey = visibleWidgets.map((w) => w.id).join('|')
+
+  const setWidgetPref = (next: WidgetPrefs) => {
+    setWidgetPrefs(next)
+    saveWidgetPrefs(next)
+  }
 
   // Initialize gridstack once the grid div is actually in the DOM (i.e. after
   // the first snapshot arrives and `ready` becomes true). Keying on `ready`
@@ -259,7 +266,11 @@ export default function App() {
 
     gs.on('change', () => saveLayout())
     return () => {
-      gs.destroy()
+      // destroy(false): keep the container element in the document — the
+      // default destroy(true) REMOVES the grid div itself, which would leave
+      // a rebuild initializing into a detached subtree (blank dashboard).
+      gs.destroy(false)
+      if (gridRef.current) gridRef.current.innerHTML = ''
       gsRef.current = null
       gridInitStarted.current = false
       widgetMounts.current.clear()
@@ -444,7 +455,14 @@ export default function App() {
       </header>
 
       {/* Settings overlay */}
-      {admin && settingsOpen && <SettingsPage onClose={() => setSettingsOpen(false)} sources={sources} />}
+      {admin && settingsOpen && (
+        <SettingsPage
+          onClose={() => setSettingsOpen(false)}
+          sources={sources}
+          widgetPrefs={widgetPrefs}
+          onWidgetPrefs={setWidgetPref}
+        />
+      )}
 
       {/* Edit-mode hint */}
       {editMode && (
