@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import * as api from './api'
 
-export function Login({ onLogin }: { onLogin: (role: string, name: string) => void }) {
+export function Login({ onLogin, onCancel }: { onLogin: (role: string, name: string) => void; onCancel?: () => void }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
@@ -57,6 +57,15 @@ export function Login({ onLogin }: { onLogin: (role: string, name: string) => vo
           >
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="w-full rounded-md border border-(--border) px-3 py-2 text-sm text-(--text-muted) hover:text-(--text)"
+            >
+              ← Back to dashboard
+            </button>
+          )}
         </form>
       </div>
     </div>

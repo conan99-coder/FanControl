@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -175,6 +176,11 @@ func Default() Config {
 		Auth: AuthConfig{
 			Enabled:    true,
 			SessionTTL: 24 * time.Hour,
+			// One default admin account: name "admin", password "admin"
+			// (plaintext until the settings page re-saves it as bcrypt).
+			Users: []User{
+				{Name: "admin", Password: "admin", Role: RoleAdmin, Hash: false},
+			},
 		},
 		BMC: BMCConfig{
 			InsecureTLS: true,
@@ -216,17 +222,24 @@ func Default() Config {
 	}
 }
 
-// DefaultLayout returns a reasonable widget grid for the rig.
+// DefaultLayout returns a reasonable widget grid for the rig. Every widget
+// type the dashboard knows about is listed (Show toggles render/hide), so the
+// settings page can present and toggle the complete set.
 func DefaultLayout() []Widget {
 	return []Widget{
 		{ID: "summary", Type: "summary", X: 0, Y: 0, W: 12, H: 1, Show: true},
 		{ID: "gpu0", Type: "gpu", X: 0, Y: 1, W: 4, H: 3, GPU: 0, Show: true},
 		{ID: "gpu1", Type: "gpu", X: 4, Y: 1, W: 4, H: 3, GPU: 1, Show: true},
 		{ID: "cpu", Type: "cpu", X: 8, Y: 1, W: 4, H: 3, Show: true},
-		{ID: "fans", Type: "fans", X: 0, Y: 4, W: 6, H: 3, Show: true},
-		{ID: "temps", Type: "temps", X: 6, Y: 4, W: 6, H: 3, Show: true},
-		{ID: "disk", Type: "disk", X: 0, Y: 7, W: 6, H: 2, Show: true},
-		{ID: "net", Type: "net", X: 6, Y: 7, W: 6, H: 2, Show: true},
+		{ID: "fans", Type: "fans", X: 0, Y: 4, W: 6, H: 4, Show: true},
+		{ID: "temps", Type: "temps", X: 6, Y: 4, W: 6, H: 4, Show: true},
+		{ID: "tempsgraph", Type: "tempsgraph", X: 0, Y: 8, W: 12, H: 5, Show: true},
+		{ID: "drives", Type: "drives", X: 0, Y: 13, W: 6, H: 3, Show: true},
+		{ID: "disk", Type: "disk", X: 6, Y: 13, W: 6, H: 3, Show: true},
+		{ID: "volts", Type: "volts", X: 0, Y: 16, W: 6, H: 2, Show: true},
+		{ID: "net", Type: "net", X: 6, Y: 16, W: 6, H: 2, Show: true},
+		{ID: "vast", Type: "vast", X: 0, Y: 18, W: 6, H: 4, Show: true},
+		{ID: "docker", Type: "docker", X: 6, Y: 18, W: 6, H: 4, Show: true},
 	}
 }
 
@@ -306,6 +319,82 @@ func ResolveSecret(ref string) (string, error) {
 		return "", fmt.Errorf("read secret %s: %w", ref, err)
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// Save writes the config atomically (temp file + rename in the same
+// directory). All fields are written; comments are not preserved.
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".fanctrl-config-*")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("replace config: %w", err)
+	}
+	return nil
+}
+
+// WriteSecret writes a 0600 secret file atomically. References of the form
+// "env:VAR" cannot be written (they live in the environment).
+func WriteSecret(ref, value string) error {
+	if ref == "" {
+		return fmt.Errorf("secret path not configured")
+	}
+	if strings.HasPrefix(ref, "env:") {
+		return fmt.Errorf("secret is configured via an environment variable; cannot write")
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(ref), ".fanctrl-secret-*")
+	if err != nil {
+		return fmt.Errorf("create temp secret: %w", err)
+	}
+	if _, err := tmp.WriteString(strings.TrimSpace(value)); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return fmt.Errorf("write temp secret: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("close temp secret: %w", err)
+	}
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("chmod secret: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), ref); err != nil {
+		os.Remove(tmp.Name())
+		return fmt.Errorf("replace secret: %w", err)
+	}
+	return nil
+}
+
+// SecretConfigured reports whether the referenced secret exists and is
+// non-empty (never returns the value).
+func SecretConfigured(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	if strings.HasPrefix(ref, "env:") {
+		return os.Getenv(strings.TrimPrefix(ref, "env:")) != ""
+	}
+	data, err := os.ReadFile(ref)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) != ""
 }
 
 // role constants

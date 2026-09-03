@@ -55,11 +55,11 @@ func TestSpaServesHtmlNotDownload(t *testing.T) {
 }
 
 func TestHandleMeta(t *testing.T) {
-	s := &Server{mux: http.NewServeMux(), assets: fakeAssets()}
+	s := &Server{mux: http.NewServeMux(), assets: fakeAssets(), cfg: &serverConfig{}}
 	s.mux.HandleFunc("/api/meta", s.handleMeta)
 
 	// auth disabled
-	s.cfg = serverConfig{AuthEnabled: false}
+	s.SetAuthEnabled(false)
 	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
 	rr := httptest.NewRecorder()
 	s.mux.ServeHTTP(rr, req)
@@ -69,7 +69,7 @@ func TestHandleMeta(t *testing.T) {
 	}
 
 	// auth enabled
-	s.cfg = serverConfig{AuthEnabled: true}
+	s.SetAuthEnabled(true)
 	req = httptest.NewRequest(http.MethodGet, "/api/meta", nil)
 	rr = httptest.NewRecorder()
 	s.mux.ServeHTTP(rr, req)

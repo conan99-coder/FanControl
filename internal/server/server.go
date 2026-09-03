@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hedchr/fanctrl/internal/auth"
+	"github.com/hedchr/fanctrl/internal/config"
 	"github.com/hedchr/fanctrl/internal/control"
 	"github.com/hedchr/fanctrl/internal/metrics"
 	"github.com/hedchr/fanctrl/internal/poller"
@@ -21,35 +23,51 @@ import (
 
 // Server is the HTTP server.
 type Server struct {
-	mux    *http.ServeMux
-	p      *poller.Poller
-	ctrl   *control.Service
-	auth   *auth.Store
-	cfg    serverConfig
-	log    *slog.Logger
-	assets fs.FS
+	mux      *http.ServeMux
+	p        *poller.Poller
+	ctrl     *control.Service
+	auth     *auth.Store
+	cfg      *serverConfig
+	settings *Settings
+	log      *slog.Logger
+	assets   fs.FS
 }
 
 type serverConfig struct {
+	mu          sync.RWMutex
 	AuthEnabled bool
 }
 
+func (c *serverConfig) authEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.AuthEnabled
+}
+
 // New builds a Server.
-func New(p *poller.Poller, ctrl *control.Service, authStore *auth.Store, authEnabled bool, assets fs.FS, log *slog.Logger) *Server {
+func New(p *poller.Poller, ctrl *control.Service, authStore *auth.Store, authEnabled bool, assets fs.FS, settings *Settings, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
 	s := &Server{
-		mux:    http.NewServeMux(),
-		p:      p,
-		ctrl:   ctrl,
-		auth:   authStore,
-		cfg:    serverConfig{AuthEnabled: authEnabled},
-		log:    log,
-		assets: assets,
+		mux:      http.NewServeMux(),
+		p:        p,
+		ctrl:     ctrl,
+		auth:     authStore,
+		cfg:      &serverConfig{AuthEnabled: authEnabled},
+		settings: settings,
+		log:      log,
+		assets:   assets,
 	}
 	s.routes()
 	return s
+}
+
+// SetAuthEnabled hot-toggles the auth requirement.
+func (s *Server) SetAuthEnabled(on bool) {
+	s.cfg.mu.Lock()
+	defer s.cfg.mu.Unlock()
+	s.cfg.AuthEnabled = on
 }
 
 // Handler returns the root http.Handler.
@@ -63,6 +81,7 @@ func (s *Server) routes() {
 	// Auth
 	s.mux.HandleFunc("/api/login", s.method("POST", s.handleLogin))
 	s.mux.Handle("/api/logout", s.authWrap(s.method("POST", s.handleLogout)))
+	s.mux.Handle("/api/me", s.authWrap(http.HandlerFunc(s.handleMe)))
 
 	// Read
 	s.mux.Handle("/api/metrics", s.wrap(s.handleMetrics))
@@ -70,6 +89,15 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/status", s.wrap(s.handleStatus))
 	s.mux.Handle("/api/health", s.wrap(s.handleHealth))
 	s.mux.Handle("/api/discovery", s.wrap(s.handleDiscovery))
+
+	// Settings (admin-only)
+	s.mux.Handle("/api/settings", s.adminWrap(s.method("GET", s.handleSettingsGet)))
+	s.mux.Handle("/api/settings/update", s.adminWrap(s.method("PUT", s.handleSettingsPut)))
+	s.mux.Handle("/api/settings/secrets/bmc", s.adminWrap(s.method("POST", s.handleSettingsSecret)))
+	s.mux.Handle("/api/settings/secrets/vast", s.adminWrap(s.method("POST", s.handleSettingsSecret)))
+	s.mux.Handle("/api/settings/restart", s.adminWrap(s.method("POST", s.handleSettingsRestart)))
+	s.mux.Handle("/api/settings/test/bmc", s.adminWrap(s.method("POST", s.handleSettingsTestBMC)))
+	s.mux.Handle("/api/settings/test/vast", s.adminWrap(s.method("POST", s.handleSettingsTestVast)))
 
 	// Control (admin-only)
 	s.mux.Handle("/api/mode", s.adminWrap(s.method("POST", s.handleSetMode)))
@@ -94,22 +122,23 @@ func (s *Server) routes() {
 func (s *Server) wrap(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setCORS(w)
-		if !s.cfg.AuthEnabled {
+		if !s.cfg.authEnabled() {
 			h(w, r)
 			return
 		}
-		sess, ok := s.authenticate(r)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		if sess, ok := s.authenticate(r); ok {
+			ctx := context.WithValue(r.Context(), ctxSessionKey{}, sess)
+			h(w, r.WithContext(ctx))
 			return
 		}
-		ctx := context.WithValue(r.Context(), ctxSessionKey{}, sess)
-		h(w, r.WithContext(ctx))
+		// Anonymous reads are allowed (read-only dashboard when logged out);
+		// write/admin endpoints are gated separately by adminWrap.
+		h(w, r)
 	})
 }
 
 func (s *Server) adminWrap(h http.Handler) http.Handler {
-	if !s.cfg.AuthEnabled {
+	if !s.cfg.authEnabled() {
 		// No auth configured -> everyone is admin (demo/localhost mode).
 		return h
 	}
@@ -219,6 +248,17 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
+// handleMe restores an existing session (used on page load so a refresh keeps
+// the user signed in). 401 when not logged in.
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	sess, ok := sessionFrom(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": sess.User, "role": sess.Role})
+}
+
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.p.Snapshot())
 }
@@ -235,7 +275,42 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	_ = r
-	writeJSON(w, http.StatusOK, s.ctrl.Status())
+	st := s.ctrl.Status()
+	// Enrich with feature sources + widget visibility from the live config so
+	// the SPA can hide widgets whose data source is disabled.
+	out := map[string]any{
+		"read_only":        st.ReadOnly,
+		"dry_run":          st.DryRun,
+		"monitor":          st.Monitor,
+		"governor_tripped": st.GovernorTripped,
+		"governor_reason":  st.GovernorReason,
+		"capabilities":     st.Capabilities,
+		"thresholds":       st.Thresholds,
+	}
+	if s.settings != nil {
+		cfg := s.settings.Current()
+		if cfg.Provider == "mock" {
+			// The mock emulates every source: show the full dashboard.
+			out["sources"] = map[string]bool{"bmc": true, "gpu": true, "vast": true, "docker": true}
+		} else {
+			out["sources"] = map[string]bool{
+				"bmc":    cfg.BMC.URL != "",
+				"gpu":    cfg.GPU.Enabled,
+				"vast":   cfg.Vast.Enabled,
+				"docker": cfg.Docker.Enabled,
+			}
+		}
+		layout := cfg.Layout.Widgets
+		if len(layout) == 0 {
+			layout = config.DefaultLayout()
+		}
+		widgets := make([]map[string]any, 0, len(layout))
+		for _, w := range layout {
+			widgets = append(widgets, map[string]any{"type": w.Type, "show": w.Show})
+		}
+		out["widgets"] = widgets
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

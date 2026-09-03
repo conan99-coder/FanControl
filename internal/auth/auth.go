@@ -53,6 +53,17 @@ func NewStore(users []config.User, secret []byte, ttl time.Duration) *Store {
 	return s
 }
 
+// ReplaceUsers hot-replaces the user list (used when settings change).
+// Existing sessions remain valid as long as the user still exists.
+func (s *Store) ReplaceUsers(users []config.User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.users = map[string]config.User{}
+	for _, u := range users {
+		s.users[u.Name] = u
+	}
+}
+
 // Authenticate validates credentials and issues a session token.
 func (s *Store) Authenticate(user, password string) (string, config.User, error) {
 	u, ok := s.users[user]

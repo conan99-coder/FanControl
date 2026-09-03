@@ -44,6 +44,13 @@ func (g *governor) SetRevert(fn func(context.Context, string) error) {
 	g.revert = fn
 }
 
+// SetThresholds hot-applies new safety thresholds.
+func (g *governor) SetThresholds(cfg config.Thresholds) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cfg = cfg
+}
+
 // Evaluate checks a snapshot and triggers a revert if a hard limit is exceeded.
 // It returns nil if no action is needed, or an error describing the revert that
 // was (or attempted to be) performed.

@@ -14,6 +14,13 @@ export interface Thresholds {
   diskUsedWarn: number
 }
 
+export interface Sources {
+  bmc: boolean
+  gpu: boolean
+  vast: boolean
+  docker: boolean
+}
+
 export interface Status {
   read_only: boolean
   dry_run: boolean
@@ -22,6 +29,8 @@ export interface Status {
   governor_reason?: string
   capabilities?: Capabilities
   thresholds?: Thresholds
+  sources?: Sources
+  widgets?: { type: string; show: boolean }[]
 }
 
 // api wires the fetch calls. Auth uses an HttpOnly cookie (set by /api/login),
@@ -67,6 +76,11 @@ export function logout(): Promise<{ ok: string }> {
   return json('/api/logout', { method: 'POST' })
 }
 
+// me restores an existing session (page load) or rejects when logged out.
+export function me(): Promise<{ user: string; role: string }> {
+  return json('/api/me')
+}
+
 export function getMetrics(): Promise<Snapshot> {
   return json('/api/metrics')
 }
@@ -74,6 +88,86 @@ export function getMetrics(): Promise<Snapshot> {
 // getHistory returns up to the last ~300 snapshots (time-series as an array).
 export function getHistory(): Promise<Snapshot[]> {
   return json('/api/history')
+}
+
+// ---- Settings (admin) ----
+
+export interface SettingsUser {
+  name: string
+  role: string
+  hash: boolean
+  password?: string // write-only
+}
+
+export interface SettingsThresholds {
+  gpuTempWarn: number
+  gpuTempHard: number
+  cpuTempWarn: number
+  cpuTempHard: number
+  diskUsedWarn: number
+  cooldown: string
+}
+
+export interface Settings {
+  configPath: string
+  listen: string
+  pollInterval: string
+  provider: string
+  dryRun: boolean
+  readOnly: boolean
+  authEnabled: boolean
+  authSessionTtl: string
+  authAllowUnauthenticatedWrites: boolean
+  authUsers: SettingsUser[]
+  authSecretPath: string
+  bmcUrl: string
+  bmcUsername: string
+  bmcPasswordPath: string
+  bmcHasPassword: boolean
+  bmcInsecureTls: boolean
+  bmcProfile: string
+  gpuEnabled: boolean
+  gpuQuery: string
+  gpuQueryInterval: string
+  vastEnabled: boolean
+  vastCli: string
+  vastApiKeyPath: string
+  vastHasKey: boolean
+  vastInterval: string
+  dockerEnabled: boolean
+  dockerCli: string
+  dockerInterval: string
+  thresholds: SettingsThresholds
+  widgets: { type: string; show: boolean }[]
+}
+
+export type SettingsPatch = Partial<Omit<Settings, 'configPath' | 'bmcHasPassword' | 'vastHasKey' | 'thresholds' | 'widgets'>> & {
+  thresholds?: Partial<SettingsThresholds>
+  widgets?: { type: string; show: boolean }[]
+}
+
+export function getSettings(): Promise<Settings> {
+  return json('/api/settings')
+}
+
+export function updateSettings(patch: SettingsPatch): Promise<Settings> {
+  return json('/api/settings/update', { method: 'PUT', body: JSON.stringify(patch) })
+}
+
+export function saveSecret(kind: 'bmc' | 'vast', value: string): Promise<{ ok: string }> {
+  return json(`/api/settings/secrets/${kind}`, { method: 'POST', body: JSON.stringify({ value }) })
+}
+
+export function testBmc(body: { url: string; username: string; password: string; insecureTls: boolean }): Promise<{ ok: boolean; error?: string }> {
+  return json('/api/settings/test/bmc', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function testVast(apiKey: string): Promise<{ ok: boolean; error?: string; machines?: number }> {
+  return json('/api/settings/test/vast', { method: 'POST', body: JSON.stringify({ apiKey }) })
+}
+
+export function restartService(): Promise<{ ok: string }> {
+  return json('/api/settings/restart', { method: 'POST' })
 }
 
 export function getStatus(): Promise<Status> {

@@ -6,9 +6,10 @@ import 'gridstack/dist/gridstack.min.css'
 // to zero width at narrower breakpoints.
 import 'gridstack/dist/gridstack-extra.min.css'
 import { GridStack } from 'gridstack'
-import type { Snapshot, DMeta } from './types'
+import type { Snapshot } from './types'
 import { Login } from './Login'
 import { ErrorBoundary } from './ErrorBoundary'
+import { SettingsPage } from './SettingsPage'
 import * as api from './api'
 import type { RowConfigs, RowCfg } from './rowconfig'
 import { loadRowConfigs, saveRowConfigs, cfgFor } from './rowconfig'
@@ -40,10 +41,11 @@ interface AppState {
 
 export default function App() {
   const [auth, setAuth] = useState<AppState | null>(null)
+  const [authEnabled, setAuthEnabled] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [history, setHistory] = useState<(number | null)[]>([])
   const [status, setStatus] = useState<api.Status | null>(null)
-  const [discovery, setDiscovery] = useState<DMeta[]>([])
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('fc-theme') as 'dark' | 'light') || 'dark')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [metaLoaded, setMetaLoaded] = useState(false)
@@ -54,8 +56,8 @@ export default function App() {
   const gsRef = useRef<GridStack | null>(null)
   const historyRef = useRef<(number | null)[]>([])
 
-  const role = auth?.role
-  const admin = role === 'admin'
+  const role = auth?.role ?? 'viewer'
+  const admin = authEnabled ? role === 'admin' : true // auth off => anonymous admin
   const ready = !!snap
 
   // Row config change handler: persists to localStorage immediately.
@@ -86,13 +88,21 @@ export default function App() {
   }
 
   // On first load, ask the server whether auth is required. When auth is off,
-  // auto-enter as anonymous admin so the dashboard renders without a login.
+  // auto-enter as anonymous admin; when it is on, the dashboard renders in
+  // read-only guest mode until the user signs in.
   useEffect(() => {
     api
       .getMeta()
       .then((m) => {
+        setAuthEnabled(m.auth_enabled)
         if (!m.auth_enabled) {
           setAuth({ role: 'admin', user: 'anonymous' })
+        } else {
+          // Restore an existing session so a refresh keeps the user signed in.
+          api
+            .me()
+            .then((u) => setAuth({ role: u.role, user: u.user }))
+            .catch(() => {})
         }
       })
       .catch(() => {
@@ -107,9 +117,9 @@ export default function App() {
     localStorage.setItem('fc-theme', theme)
   }, [theme])
 
-  // SSE live data
+  // SSE live data — streams for everyone (guests see a read-only dashboard).
   useEffect(() => {
-    if (!auth) return
+    if (!metaLoaded) return
     const close = api.streamMetrics((s) => {
       setSnap(s)
       // Rolling history for the summary sparkline (CPU load series).
@@ -120,19 +130,18 @@ export default function App() {
       setHistory(arr)
     })
     return close
-  }, [auth])
+  }, [metaLoaded])
 
-  // Non-SSE data (status, discovery) polled periodically
+  // Non-SSE data (status) polled periodically
   useEffect(() => {
-    if (!auth) return
+    if (!metaLoaded) return
     const tick = () => {
       api.getStatus().then(setStatus).catch(() => {})
-      api.getDiscovery().then(setDiscovery).catch(() => {})
     }
     tick()
     const t = setInterval(tick, 8000)
     return () => clearInterval(t)
-  }, [auth])
+  }, [metaLoaded])
 
   // Widget grid
   const widgets: WidgetDef[] = [
@@ -151,6 +160,19 @@ export default function App() {
     { id: 'docker', type: 'docker' },
   ]
 
+  // Visible widgets: hidden when their data source is disabled (no BMC => no
+  // temps/fans/volts, no empty boxes) or when the operator toggled them off
+  // in the settings page (server config).
+  const sources = status?.sources
+  const widgetShow = new Map((status?.widgets ?? []).map((w) => [w.type, w.show]))
+  const visibleWidgets = widgets.filter((w) => {
+    const src = sourceFor(w.type)
+    if (src && sources && !sources[src]) return false
+    if (widgetShow.get(w.type) === false) return false
+    return true
+  })
+  const widgetKey = visibleWidgets.map((w) => w.id).join('|')
+
   // Initialize gridstack once the grid div is actually in the DOM (i.e. after
   // the first snapshot arrives and `ready` becomes true). Keying on `ready`
   // (not `auth`) is essential: auth is set before any data snapshot, so the grid
@@ -162,6 +184,7 @@ export default function App() {
   const gridInitStarted = useRef(false)
   const widgetMounts = useRef<Map<string, HTMLElement>>(new Map())
   const [gridVersion, setGridVersion] = useState(0) // re-render after mounts
+  const [gridEpoch, setGridEpoch] = useState(0) // forces grid rebuild after login screen
   useEffect(() => {
     if (!ready || gridInitStarted.current || !gridRef.current) return
     gridInitStarted.current = true
@@ -202,7 +225,7 @@ export default function App() {
     // an older layout without them.
     const defaults = defaultLayout()
     const saved = loadLayout()
-    const layout = widgets.map((w) => {
+    const layout = visibleWidgets.map((w) => {
       const savedNode = saved.find((s) => s.id === w.id)
       const def = defaults.find((d) => d.id === w.id)
       return (
@@ -242,7 +265,7 @@ export default function App() {
       widgetMounts.current.clear()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready])
+  }, [ready, widgetKey, gridEpoch])
 
   // Default positions for the widget grid (kept in sync with the config layout).
   function defaultLayout(): { id: string; x: number; y: number; w: number; h: number }[] {
@@ -329,8 +352,21 @@ export default function App() {
   if (!metaLoaded) {
     return null
   }
-  if (!auth) {
-    return <Login onLogin={(r, name) => setAuth({ role: r, user: name })} />
+  // Sign-in overlay (auth enabled, user chose to log in).
+  if (showLogin) {
+    return (
+      <Login
+        onLogin={(r, name) => {
+          setAuth({ role: r, user: name })
+          setShowLogin(false)
+          setGridEpoch((e) => e + 1)
+        }}
+        onCancel={() => {
+          setShowLogin(false)
+          setGridEpoch((e) => e + 1)
+        }}
+      />
+    )
   }
 
   const goRed = status?.governor_tripped
@@ -346,6 +382,14 @@ export default function App() {
           {goRed && <span className="pill pill-danger animate-pulse-danger">Safety governor</span>}
         </div>
         <div className="flex items-center gap-3">
+          {authEnabled && !auth && (
+            <button
+              onClick={() => setShowLogin(true)}
+              className="px-3 py-1 rounded-full text-xs font-semibold border border-(--accent) text-(--accent) hover:bg-(--accent) hover:text-(--bg) transition"
+            >
+              Sign in
+            </button>
+          )}
           {admin && (
             <button
               onClick={toggleMode}
@@ -360,17 +404,19 @@ export default function App() {
               {monitor ? '🛰️ Monitor' : '⚙️ Control'}
             </button>
           )}
-          <button
-            onClick={() => setEditMode((v) => !v)}
-            title={editMode ? 'Finish editing the dashboard' : 'Edit dashboard: hide, rename, reorder rows'}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${
-              editMode
-                ? 'border-(--warn) bg-(--warn) text-(--bg)'
-                : 'border-(--border) bg-(--bg-panel-2) text-(--text-muted) hover:text-(--text)'
-            }`}
-          >
-            {editMode ? '✔ Done' : '✏️ Edit'}
-          </button>
+          {admin && (
+            <button
+              onClick={() => setEditMode((v) => !v)}
+              title={editMode ? 'Finish editing the dashboard' : 'Edit dashboard: hide, rename, reorder rows'}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${
+                editMode
+                  ? 'border-(--warn) bg-(--warn) text-(--bg)'
+                  : 'border-(--border) bg-(--bg-panel-2) text-(--text-muted) hover:text-(--text)'
+              }`}
+            >
+              {editMode ? '✔ Done' : '✏️ Edit'}
+            </button>
+          )}
           {admin && (
             <button
               onClick={() => setSettingsOpen((v) => !v)}
@@ -385,39 +431,20 @@ export default function App() {
           >
             {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
           </button>
-          <span className="text-xs text-(--text-faint)">{auth.user} ({role})</span>
-          <button
-            onClick={async () => { await api.logout().catch(() => {}); setAuth(null) }}
-            className="text-xs text-(--text-muted) hover:text-(--danger)"
-          >
-            Sign out
-          </button>
+          <span className="text-xs text-(--text-faint)">{auth ? `${auth.user} (${role})` : 'read-only'}</span>
+          {auth && authEnabled && (
+            <button
+              onClick={async () => { await api.logout().catch(() => {}); setAuth(null) }}
+              className="text-xs text-(--text-muted) hover:text-(--danger)"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Settings drawer */}
-      {admin && settingsOpen && (
-        <div className="mb-3 rounded-xl border border-(--border) bg-(--bg-panel) p-4 text-sm">
-          <div className="label mb-2">Detected hardware</div>
-          {discovery.length === 0 ? (
-            <div className="text-(--text-faint)">Polling discovery…</div>
-          ) : (
-            discovery.map((d) => (
-              <div key={d.source} className="mb-2 text-xs">
-                <span className="font-semibold text-(--accent-2)">{d.source}</span>
-                {d.cpu?.model && <span className="text-(--text-muted)"> — {d.cpu.model} ({d.cpu.cores}c/{d.cpu.threads}t)</span>}
-                <div className="text-(--text-faint) mt-1">
-                  {d.fans?.length > 0 && <>fans: {d.fans.map((f) => `${f.name}#${f.id}`).join(', ')} · </>}
-                  {d.gpus?.length > 0 && <>gpus: {d.gpus.map((g) => `${g.index}: ${g.name}${g.fan_control ? ' [fan-cfg]' : ''}`).join(', ')} · </>}
-                  {d.thermals?.length > 0 && <>thermals: {d.thermals.length} · </>}
-                  {d.disks?.length > 0 && <>disks: {d.disks.length} · </>}
-                  {d.nets?.length > 0 && <>nets: {d.nets.join(', ')}</>}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/* Settings overlay */}
+      {admin && settingsOpen && <SettingsPage onClose={() => setSettingsOpen(false)} sources={sources} />}
 
       {/* Edit-mode hint */}
       {editMode && (
@@ -438,7 +465,7 @@ export default function App() {
           only after gridstack created the slots (gridVersion), and re-render
           automatically as snapshots stream in. */}
       {gridVersion > 0 &&
-        widgets.map((w) => {
+        visibleWidgets.map((w) => {
           const target = widgetMounts.current.get(w.id)
           if (!target) return null
           return createPortal(
@@ -453,4 +480,24 @@ export default function App() {
       </footer>
     </div>
   )
+}
+
+// sourceFor maps a widget type to the feature source that must be enabled for
+// it to appear (null = always available).
+function sourceFor(type: string): 'bmc' | 'gpu' | 'vast' | 'docker' | null {
+  switch (type) {
+    case 'gpu':
+      return 'gpu'
+    case 'temps':
+    case 'tempsgraph':
+    case 'fans':
+    case 'volts':
+      return 'bmc'
+    case 'vast':
+      return 'vast'
+    case 'docker':
+      return 'docker'
+    default:
+      return null
+  }
 }

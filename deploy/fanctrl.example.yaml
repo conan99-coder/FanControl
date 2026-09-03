@@ -30,17 +30,14 @@ auth:
   session_ttl: 24h
   # session signing secret: 0600 file path, or env:VAR name.
   secret_path: "/etc/fanctrl/secret"
-  # static users. Password is a bcrypt hash (hash: true) or plaintext (hash:
-  # false). Generate hashes with:  htpasswd -bnBC 10 "" <pw> | tr -d ':\n'
+  # The default account: admin / admin (plaintext). CHANGE IT from the Settings
+  # page after first login (auth -> users). Passwords may be bcrypt hashes
+  # (hash: true) or plaintext (hash: false).
   users:
     - name: admin
-      password: "$2y$10$REPLACE_WITH_A_BCRYPT_HASH"
+      password: "admin"
       role: admin
-      hash: true
-    - name: viewer
-      password: "$2y$10$REPLACE_WITH_A_DIFFERENT_BCRYPT_HASH"
-      role: viewer
-      hash: true
+      hash: false
 
 bmc:
   # Gigabyte MC62-G40 BMC (Redfish, basic auth).

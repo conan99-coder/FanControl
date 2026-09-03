@@ -78,9 +78,12 @@ func (p *Poller) Tick(ctx context.Context) {
 }
 
 func (p *Poller) tick(ctx context.Context) {
+	p.mu.RLock()
+	providers := append([]metrics.Provider(nil), p.providers...)
+	p.mu.RUnlock()
 	merged := metrics.Snapshot{Time: time.Now()}
 	var lastErr error
-	for _, prov := range p.providers {
+	for _, prov := range providers {
 		snap, err := prov.Collect(ctx)
 		if err != nil {
 			// A transient failure in one provider shouldn't wipe the others.
@@ -199,4 +202,19 @@ func (p *Poller) Governor() *governor {
 // Thresholds returns the configured safety thresholds.
 func (p *Poller) Thresholds() config.Thresholds {
 	return p.cfg
+}
+
+// SetThresholds hot-applies new safety thresholds (poller + governor).
+func (p *Poller) SetThresholds(cfg config.Thresholds) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cfg = cfg
+	p.governor.SetThresholds(cfg)
+}
+
+// SetProviders hot-replaces the provider set (e.g. after a config change).
+func (p *Poller) SetProviders(providers []metrics.Provider) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.providers = providers
 }

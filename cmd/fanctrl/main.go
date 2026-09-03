@@ -8,10 +8,12 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -73,65 +75,7 @@ func main() {
 	defer stop()
 
 	// --- Providers ---
-	var providers []metrics.Provider
-	var ctrl metrics.Controller
-
-	switch cfg.Provider {
-	case "mock":
-		mp := mock.NewProvider()
-		providers = append(providers, mp)
-		ctrl = mock.NewController()
-		log.Info("running with MOCK provider", "mode", cfg.Provider)
-	default: // real
-		hostP := host.NewProvider(0)
-		providers = append(providers, hostP)
-		var gpuP *gpu.Provider
-		var gpuCtl *gpu.Controller
-		if cfg.GPU.Enabled {
-			gpuP = gpu.NewProvider(cfg.GPU.Query)
-			providers = append(providers, gpuP)
-			// Detect GPU fan-control capability (probes fan.speed readability).
-			gpuCtl = gpu.NewController(cfg.GPU.Query)
-		}
-		var bmcCtl metrics.Controller
-		if cfg.BMC.URL != "" {
-			pass, err := config.ResolveSecret(cfg.BMC.PasswordPath)
-			if err != nil {
-				log.Warn("bmc password", "err", err)
-			}
-			rc := redfish.NewClient(cfg.BMC.URL, cfg.BMC.Username, pass, cfg.BMC.InsecureTLS)
-			providers = append(providers, rc)
-			bmcCtl = rc
-
-			// AMI sensor readings provider: voltages (P_12V/5V/3V3/...) are only
-			// available via the AMI web API, not Redfish Thermal.
-			ami := redfish.NewAMIClient(cfg.BMC.URL, cfg.BMC.Username, pass, cfg.BMC.InsecureTLS)
-			providers = append(providers, ami)
-		}
-		// Optional read-only Vast.ai hosting telemetry (earnings/rates/contracts).
-		if cfg.Vast.Enabled {
-			vastP := vast.NewProvider(vast.Options{
-				CLI:        cfg.Vast.CLI,
-				APIKeyPath: cfg.Vast.APIKeyPath,
-				Interval:   cfg.Vast.Interval,
-			})
-			providers = append(providers, vastP)
-		}
-		// Optional read-only Docker container metadata (renters' instances).
-		if cfg.Docker.Enabled {
-			dk := docker.NewProvider(docker.Options{
-				CLI:      cfg.Docker.CLI,
-				Interval: cfg.Docker.Interval,
-			})
-			providers = append(providers, dk)
-		}
-		// Compose the controller: BMC for profiles/duty, GPU for GPU fans.
-		ctrl = composite.New(bmcCtl, gpuCtl)
-		if bmcCtl == nil && gpuCtl == nil {
-			log.Warn("no BMC or GPU control configured; control endpoints will report unavailable")
-		}
-		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "", "vast", cfg.Vast.Enabled, "docker", cfg.Docker.Enabled)
-	}
+	providers, ctrl := buildProviders(cfg, log)
 
 	// --- History ring ---
 	hist := poller.NewRing(cfg.History.Points)
@@ -156,9 +100,34 @@ func main() {
 	secret, _ := config.ResolveSecret(cfg.Auth.SecretPath)
 	authStore := auth.NewStore(cfg.Auth.Users, []byte(secret), cfg.Auth.SessionTTL)
 
+	// --- Hot-apply engine (settings page) ---
+	// ApplyFunc rebuilds providers/control/auth from a new config so settings
+	// changes take effect without a restart wherever possible.
+	var srv *server.Server
+	apply := func(newCfg config.Config) error {
+		provs, ctrlNew := buildProviders(newCfg, log)
+		p.SetProviders(provs)
+		p.SetThresholds(newCfg.Thresholds)
+		ctrlSvc.SetController(ctrlNew)
+		ctrlSvc.SetDryRun(newCfg.DryRun)
+		ctrlSvc.SetReadOnly(newCfg.ReadOnly)
+		authStore.ReplaceUsers(newCfg.Auth.Users)
+		srv.SetAuthEnabled(newCfg.Auth.Enabled)
+		log.Info("settings hot-applied")
+		return nil
+	}
+	restartFn := func() error {
+		cmd := exec.Command("systemctl", "restart", "fanctrl")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("systemctl restart: %w", err)
+		}
+		return nil
+	}
+	settings := server.NewSettings(*configPath, cfg, apply, restartFn, ctrlSvc.Record)
+
 	// --- Server ---
 	assets := webAssets()
-	srv := server.New(p, ctrlSvc, authStore, cfg.Auth.Enabled, assets, log)
+	srv = server.New(p, ctrlSvc, authStore, cfg.Auth.Enabled, assets, settings, log)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,
@@ -180,6 +149,67 @@ func main() {
 		log.Error("server", "err", err)
 		os.Exit(1)
 	}
+}
+
+// buildProviders wires the provider set + fan controller for a config. Used at
+// startup and by the settings hot-apply path.
+func buildProviders(cfg config.Config, log *slog.Logger) ([]metrics.Provider, metrics.Controller) {
+	var providers []metrics.Provider
+	var ctrl metrics.Controller
+
+	switch cfg.Provider {
+	case "mock":
+		mp := mock.NewProvider()
+		providers = append(providers, mp)
+		ctrl = mock.NewController()
+		log.Info("running with MOCK provider", "mode", cfg.Provider)
+	default: // real
+		hostP := host.NewProvider(0)
+		providers = append(providers, hostP)
+		var gpuCtl *gpu.Controller
+		if cfg.GPU.Enabled {
+			providers = append(providers, gpu.NewProvider(cfg.GPU.Query))
+			// Detect GPU fan-control capability (probes fan.speed readability).
+			gpuCtl = gpu.NewController(cfg.GPU.Query)
+		}
+		var bmcCtl metrics.Controller
+		if cfg.BMC.URL != "" {
+			pass, err := config.ResolveSecret(cfg.BMC.PasswordPath)
+			if err != nil {
+				log.Warn("bmc password", "err", err)
+			}
+			rc := redfish.NewClient(cfg.BMC.URL, cfg.BMC.Username, pass, cfg.BMC.InsecureTLS)
+			providers = append(providers, rc)
+			bmcCtl = rc
+
+			// AMI sensor readings provider: voltages (P_12V/5V/3V3/...) are only
+			// available via the AMI web API, not Redfish Thermal.
+			ami := redfish.NewAMIClient(cfg.BMC.URL, cfg.BMC.Username, pass, cfg.BMC.InsecureTLS)
+			providers = append(providers, ami)
+		}
+		// Optional read-only Vast.ai hosting telemetry (earnings/rates/contracts).
+		if cfg.Vast.Enabled {
+			providers = append(providers, vast.NewProvider(vast.Options{
+				CLI:        cfg.Vast.CLI,
+				APIKeyPath: cfg.Vast.APIKeyPath,
+				Interval:   cfg.Vast.Interval,
+			}))
+		}
+		// Optional read-only Docker container metadata (renters' instances).
+		if cfg.Docker.Enabled {
+			providers = append(providers, docker.NewProvider(docker.Options{
+				CLI:      cfg.Docker.CLI,
+				Interval: cfg.Docker.Interval,
+			}))
+		}
+		// Compose the controller: BMC for profiles/duty, GPU for GPU fans.
+		ctrl = composite.New(bmcCtl, gpuCtl)
+		if bmcCtl == nil && gpuCtl == nil {
+			log.Warn("no BMC or GPU control configured; control endpoints will report unavailable")
+		}
+		log.Info("running with REAL providers", "host", true, "gpu", cfg.GPU.Enabled, "bmc", cfg.BMC.URL != "", "vast", cfg.Vast.Enabled, "docker", cfg.Docker.Enabled)
+	}
+	return providers, ctrl
 }
 
 // webAssets returns the embedded web dist as an fs.FS, or nil if not built.

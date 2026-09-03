@@ -70,6 +70,32 @@ func (s *Service) Monitor() bool {
 	return s.monitor
 }
 
+// SetController hot-replaces the underlying controller.
+func (s *Service) SetController(c metrics.Controller) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ctrl = c
+}
+
+// SetDryRun toggles dry-run at runtime (hot-apply).
+func (s *Service) SetDryRun(dry bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dry = dry
+}
+
+// SetReadOnly toggles read-only at runtime (hot-apply).
+func (s *Service) SetReadOnly(ro bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ro = ro
+}
+
+// Record appends an audit entry (exported for the settings API).
+func (s *Service) Record(actor, action string, detail map[string]any, result string) {
+	s.auditRecord(actor, action, detail, result)
+}
+
 // SetMonitor switches between Monitor (true) and Control (false). Returns the
 // resulting state; callers should gate this behind admin auth.
 func (s *Service) SetMonitor(on bool) bool {

@@ -175,10 +175,10 @@ function LineChart({
             <rect x={M.l} y={yFor(dmin)} width={plotW} height={Math.max(0, yFor(warn) - yFor(dmin))} fill="var(--ok)" opacity={0.12} />
           )}
           {warn != null && hard != null && hard > warn && warn < dmax && (
-            <rect x={M.l} y={yFor(warn)} width={plotW} height={yFor(hard) - yFor(warn)} fill="var(--warn)" opacity={0.2} />
+            <rect x={M.l} y={yFor(warn)} width={plotW} height={Math.max(0, yFor(hard) - yFor(warn))} fill="var(--warn)" opacity={0.2} />
           )}
           {hard != null && hard > dmin && hard < dmax && (
-            <rect x={M.l} y={yFor(hard)} width={plotW} height={yFor(dmax) - yFor(hard)} fill="var(--danger)" opacity={0.22} />
+            <rect x={M.l} y={yFor(hard)} width={plotW} height={Math.max(0, yFor(dmax) - yFor(hard))} fill="var(--danger)" opacity={0.22} />
           )}
         </g>
         {/* horizontal grid + y labels */}

@@ -57,8 +57,11 @@ func TestValidateLiveConfig(t *testing.T) {
 	if cfg.Auth.Enabled {
 		t.Errorf("auth.enabled=%v, want false (localhost-only; reverse proxy)", cfg.Auth.Enabled)
 	}
-	if len(cfg.Auth.Users) != 0 {
-		t.Errorf("no users should be configured (skipped), got %d", len(cfg.Auth.Users))
+	if len(cfg.Auth.Users) != 1 {
+		t.Errorf("expected the default admin user, got %d users", len(cfg.Auth.Users))
+	}
+	if cfg.Auth.Users[0].Name != "admin" || cfg.Auth.Users[0].Role != "admin" || cfg.Auth.Users[0].Password != "admin" {
+		t.Errorf("default user mismatch: %+v", cfg.Auth.Users[0])
 	}
 }
 

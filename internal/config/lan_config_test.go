@@ -38,8 +38,8 @@ func TestValidateLanConfig(t *testing.T) {
 	if !cfg.Auth.AllowUnauthenticatedWrites {
 		t.Error("lan config must set allow_unauthenticated_writes for 0.0.0.0 + writes + no auth")
 	}
-	if len(cfg.Auth.Users) != 0 {
-		t.Errorf("no users expected, got %d", len(cfg.Auth.Users))
+	if len(cfg.Auth.Users) != 1 || cfg.Auth.Users[0].Name != "admin" {
+		t.Errorf("expected the default admin user (auth off => unused), got %d", len(cfg.Auth.Users))
 	}
 	if cfg.Listen != "0.0.0.0:8080" {
 		t.Errorf("listen=%q, want 0.0.0.0:8080", cfg.Listen)
