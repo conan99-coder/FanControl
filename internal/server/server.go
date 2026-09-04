@@ -126,14 +126,17 @@ func (s *Server) wrap(h http.HandlerFunc) http.Handler {
 			h(w, r)
 			return
 		}
-		if sess, ok := s.authenticate(r); ok {
-			ctx := context.WithValue(r.Context(), ctxSessionKey{}, sess)
-			h(w, r.WithContext(ctx))
+		// Reads require a valid session when auth is enabled: the dashboard
+		// (and its live stream) carries the session cookie reliably, while
+		// cached HTTP Basic Auth from a reverse proxy is NOT reliably attached
+		// to XHR/fetch requests — causing password-prompt loops.
+		sess, ok := s.authenticate(r)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}
-		// Anonymous reads are allowed (read-only dashboard when logged out);
-		// write/admin endpoints are gated separately by adminWrap.
-		h(w, r)
+		ctx := context.WithValue(r.Context(), ctxSessionKey{}, sess)
+		h(w, r.WithContext(ctx))
 	})
 }
 

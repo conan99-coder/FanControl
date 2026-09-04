@@ -206,15 +206,61 @@ export function setGPUFan(gpu: number, pct: number): Promise<{ ok: string }> {
   return json('/api/fan/gpu', { method: 'POST', body: JSON.stringify({ gpu, pct }) })
 }
 
-// streamMetrics opens an SSE connection and invokes cb on each snapshot.
+// streamMetrics opens a live update stream and invokes cb on each snapshot.
+//
+// Implemented with fetch + a body reader instead of EventSource: EventSource
+// cannot attach the browser's cached HTTP Basic Auth credentials, so behind a
+// password-protected reverse proxy (e.g. Nginx Proxy Manager) every reconnect
+// gets challenged and the user sees a password popup every ~3s. Regular fetch
+// requests carry the cached credentials like any other page request.
 export function streamMetrics(cb: (snap: Snapshot) => void): () => void {
-  const es = new EventSource('/api/stream')
-  es.onmessage = (ev) => {
-    try {
-      cb(JSON.parse(ev.data))
-    } catch {
-      // ignore malformed frames
+  let stopped = false
+  const ctrl = new AbortController()
+  const run = async () => {
+    while (!stopped) {
+      try {
+        const res = await fetch('/api/stream', {
+          credentials: 'include',
+          signal: ctrl.signal,
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!res.ok || !res.body) throw new Error('stream status ' + res.status)
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          // SSE frames: "data: {json}\n\n"
+          let idx: number
+          while ((idx = buf.indexOf('\n\n')) >= 0) {
+            const frame = buf.slice(0, idx)
+            buf = buf.slice(idx + 2)
+            const data = frame
+              .split('\n')
+              .filter((l) => l.startsWith('data:'))
+              .map((l) => l.slice(5).trim())
+              .join('\n')
+            if (data) {
+              try {
+                cb(JSON.parse(data))
+              } catch {
+                // ignore malformed frames
+              }
+            }
+          }
+        }
+      } catch {
+        // stream dropped (or auth challenge): retry shortly
+      }
+      if (stopped) return
+      await new Promise((r) => setTimeout(r, 3000))
     }
   }
-  return () => es.close()
+  run()
+  return () => {
+    stopped = true
+    ctrl.abort()
+  }
 }

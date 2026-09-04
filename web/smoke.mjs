@@ -30,7 +30,7 @@ const run = async () => {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 
-  await page.goto(BASE, { waitUntil: 'networkidle' })
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
   // Wait for the dashboard to render past "Connecting to live data…".
   await page.waitForSelector('.grid-stack-item', { timeout: 15000 }).catch(() => {})
 
@@ -54,7 +54,7 @@ const run = async () => {
       ])
     )
   })
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.grid-stack-item', { timeout: 15000 }).catch(() => {})
   await page.waitForTimeout(2000)
 

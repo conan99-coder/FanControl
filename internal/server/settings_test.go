@@ -132,18 +132,40 @@ func TestSettingsRequireAdmin(t *testing.T) {
 	}
 }
 
-func TestSettingsReadPublicWhenAuthEnabled(t *testing.T) {
+func TestSettingsReadsRequireAuthWhenEnabled(t *testing.T) {
 	cfg := config.Default()
 	cfg.Provider = "mock"
 	cfg.DryRun = true
 	cfg.Listen = "127.0.0.1:8080"
 	s := testServer(t, cfg, "", nil)
 
-	// Read endpoints are reachable without a session (read-only dashboard).
+	// Reads are 401 without a session (auth enabled => login required).
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	rr := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", rr.Code)
+	}
+
+	// After login the same read succeeds.
+	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"admin","password":"admin"}`))
+	login.Header.Set("Content-Type", "application/json")
+	lr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(lr, login)
+	if lr.Code != http.StatusOK {
+		t.Fatalf("login = %d: %s", lr.Code, lr.Body.String())
+	}
+	cookie := ""
+	for _, c := range lr.Result().Cookies() {
+		if c.Name == "fanctrl_session" {
+			cookie = c.Value
+		}
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	req.AddCookie(&http.Cookie{Name: "fanctrl_session", Value: cookie})
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("anonymous status = %d, want 200", rr.Code)
+		t.Fatalf("authenticated status = %d, want 200", rr.Code)
 	}
 }

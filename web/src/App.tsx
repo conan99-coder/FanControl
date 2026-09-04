@@ -42,7 +42,6 @@ interface AppState {
 export default function App() {
   const [auth, setAuth] = useState<AppState | null>(null)
   const [authEnabled, setAuthEnabled] = useState(false)
-  const [showLogin, setShowLogin] = useState(false)
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [history, setHistory] = useState<(number | null)[]>([])
   const [status, setStatus] = useState<api.Status | null>(null)
@@ -89,8 +88,8 @@ export default function App() {
   }
 
   // On first load, ask the server whether auth is required. When auth is off,
-  // auto-enter as anonymous admin; when it is on, the dashboard renders in
-  // read-only guest mode until the user signs in.
+  // auto-enter as anonymous admin; when it is on, the login screen shows
+  // until a session exists (reads are protected server-side).
   useEffect(() => {
     api
       .getMeta()
@@ -118,9 +117,10 @@ export default function App() {
     localStorage.setItem('fc-theme', theme)
   }, [theme])
 
-  // SSE live data — streams for everyone (guests see a read-only dashboard).
+  // SSE live data — streams once signed in (guests get the login screen when
+  // auth is enabled; cookies carry the session on the stream).
   useEffect(() => {
-    if (!metaLoaded) return
+    if (!metaLoaded || !auth) return
     const close = api.streamMetrics((s) => {
       setSnap(s)
       // Rolling history for the summary sparkline (CPU load series).
@@ -131,18 +131,18 @@ export default function App() {
       setHistory(arr)
     })
     return close
-  }, [metaLoaded])
+  }, [metaLoaded, auth])
 
   // Non-SSE data (status) polled periodically
   useEffect(() => {
-    if (!metaLoaded) return
+    if (!metaLoaded || !auth) return
     const tick = () => {
       api.getStatus().then(setStatus).catch(() => {})
     }
     tick()
     const t = setInterval(tick, 8000)
     return () => clearInterval(t)
-  }, [metaLoaded])
+  }, [metaLoaded, auth])
 
   // Widget grid
   const widgets: WidgetDef[] = [
@@ -232,19 +232,34 @@ export default function App() {
     // an older layout without them.
     const defaults = defaultLayout()
     const saved = loadLayout()
-    const layout = visibleWidgets.map((w) => {
-      const savedNode = saved.find((s) => s.id === w.id)
-      const def = defaults.find((d) => d.id === w.id)
-      return (
-        savedNode ?? {
-          id: w.id,
-          x: def?.x ?? 0,
-          y: def?.y ?? 0,
-          w: def?.w ?? 4,
-          h: def?.h ?? 3,
-        }
-      )
-    })
+    const mobileAtInit = window.matchMedia('(pointer: coarse), (max-width: 900px)').matches
+    let layout: { id: string; x: number; y: number; w: number; h: number }[]
+    if (mobileAtInit) {
+      // Mobile: stack every widget full-width from the top in order. No saved
+      // positions, so hiding widgets above automatically packs the rest up
+      // (the grid rebuilds and assigns fresh sequential rows).
+      let y = 0
+      layout = visibleWidgets.map((w) => {
+        const def = defaults.find((d) => d.id === w.id)
+        const node = { id: w.id, x: 0, y, w: 3, h: def?.h ?? 3 }
+        y += node.h
+        return node
+      })
+    } else {
+      layout = visibleWidgets.map((w) => {
+        const savedNode = saved.find((s) => s.id === w.id)
+        const def = defaults.find((d) => d.id === w.id)
+        return (
+          savedNode ?? {
+            id: w.id,
+            x: def?.x ?? 0,
+            y: def?.y ?? 0,
+            w: def?.w ?? 4,
+            h: def?.h ?? 3,
+          }
+        )
+      })
+    }
     for (const w of layout) {
       // addWidget creates the grid-stack-item element; the content option
       // becomes the inner HTML of its .grid-stack-item-content child. We portal
@@ -265,13 +280,34 @@ export default function App() {
     setGridVersion((v) => v + 1)
 
     gs.on('change', () => saveLayout())
+    // Debug/test hook: allows inspecting the grid instance (e.g. options).
+    ;(window as unknown as { __fcGrid?: GridStack }).__fcGrid = gs
+
+    // Mobile/touch: disable widget drag & resize so swipes scroll the page
+    // instead of grabbing widgets. Re-evaluated when the viewport crosses the
+    // breakpoint (or a touch device is used).
+    const mq = window.matchMedia('(pointer: coarse), (max-width: 900px)')
+    const applyMobile = () => {
+      const mobile = mq.matches
+      gs.enableMove(!mobile)
+      gs.enableResize(!mobile)
+      // Mobile packs widgets upward (float off); desktop keeps free-floating
+      // placement. Positions themselves are stacked at init for mobile.
+      gs.float(!mobile)
+    }
+    applyMobile()
+    const onMqChange = () => applyMobile()
+    mq.addEventListener('change', onMqChange)
+
     return () => {
+      mq.removeEventListener('change', onMqChange)
       // destroy(false): keep the container element in the document — the
       // default destroy(true) REMOVES the grid div itself, which would leave
       // a rebuild initializing into a detached subtree (blank dashboard).
       gs.destroy(false)
       if (gridRef.current) gridRef.current.innerHTML = ''
       gsRef.current = null
+      ;(window as unknown as { __fcGrid?: GridStack }).__fcGrid = undefined
       gridInitStarted.current = false
       widgetMounts.current.clear()
     }
@@ -363,17 +399,13 @@ export default function App() {
   if (!metaLoaded) {
     return null
   }
-  // Sign-in overlay (auth enabled, user chose to log in).
-  if (showLogin) {
+  // Auth enabled + no session => login screen (the API requires a session,
+  // which also keeps the dashboard + earnings private).
+  if (authEnabled && !auth) {
     return (
       <Login
         onLogin={(r, name) => {
           setAuth({ role: r, user: name })
-          setShowLogin(false)
-          setGridEpoch((e) => e + 1)
-        }}
-        onCancel={() => {
-          setShowLogin(false)
           setGridEpoch((e) => e + 1)
         }}
       />
@@ -385,7 +417,7 @@ export default function App() {
   return (
     <div className="min-h-screen p-3">
       {/* Header */}
-      <header className="flex items-center justify-between mb-3">
+      <header className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">🌡️</span>
           <h1 className="text-lg font-semibold">FanControl</h1>
@@ -393,14 +425,6 @@ export default function App() {
           {goRed && <span className="pill pill-danger animate-pulse-danger">Safety governor</span>}
         </div>
         <div className="flex items-center gap-3">
-          {authEnabled && !auth && (
-            <button
-              onClick={() => setShowLogin(true)}
-              className="px-3 py-1 rounded-full text-xs font-semibold border border-(--accent) text-(--accent) hover:bg-(--accent) hover:text-(--bg) transition"
-            >
-              Sign in
-            </button>
-          )}
           {admin && (
             <button
               onClick={toggleMode}
@@ -442,7 +466,7 @@ export default function App() {
           >
             {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
           </button>
-          <span className="text-xs text-(--text-faint)">{auth ? `${auth.user} (${role})` : 'read-only'}</span>
+          <span className="text-xs text-(--text-faint)">{auth ? `${auth.user} (${role})` : ''}</span>
           {auth && authEnabled && (
             <button
               onClick={async () => { await api.logout().catch(() => {}); setAuth(null) }}
