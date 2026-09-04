@@ -5,6 +5,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -16,6 +17,8 @@ import (
 type Service struct {
 	// ctrl is the underlying controller (real or mock).
 	ctrl metrics.Controller
+	// vast is the optional Vast.ai host-ops backend (listing/maintenance).
+	vast metrics.VastOps
 	// poller gives access to the latest snapshot and governor.
 	p       *poller.Poller
 	dry     bool
@@ -31,6 +34,9 @@ type Options struct {
 	DryRun   bool
 	ReadOnly bool
 	Audit    *AuditLog
+	// VastOps is the optional Vast.ai host-ops backend (listing updates,
+	// unlisting, maintenance scheduling). Nil => those endpoints unavailable.
+	VastOps metrics.VastOps
 	// MonitorMode controls the initial mode. The zero value (false) means
 	// "default to Monitor ON" — the safe state: display values only, every
 	// write refused until an admin switches to Control. To start in Control
@@ -49,7 +55,7 @@ func New(ctrl metrics.Controller, p *poller.Poller, o Options, log *slog.Logger)
 	if o.MonitorMode != nil {
 		mon = *o.MonitorMode
 	}
-	s := &Service{ctrl: ctrl, p: p, dry: o.DryRun, ro: o.ReadOnly, monitor: mon, log: log, audit: o.Audit}
+	s := &Service{ctrl: ctrl, vast: o.VastOps, p: p, dry: o.DryRun, ro: o.ReadOnly, monitor: mon, log: log, audit: o.Audit}
 	// Wire the governor's revert to a safe default: switch to the "CPU" profile
 	// (this is what the board ships with as a sane default). If dry-run, or
 	// read-only, or monitor-mode, log instead of writing.
@@ -75,6 +81,86 @@ func (s *Service) SetController(c metrics.Controller) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ctrl = c
+}
+
+// SetVastOps hot-replaces the Vast.ai host-ops backend.
+func (s *Service) SetVastOps(v metrics.VastOps) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.vast = v
+}
+
+// errNoVastOps is returned when no Vast host-ops backend is configured.
+var errNoVastOps = errors.New("vast host-ops not configured")
+
+// SetVastListing updates a machine's listing (prices/expiration), respecting
+// the same gates as fan writes.
+func (s *Service) SetVastListing(ctx context.Context, actor string, machineID int, p metrics.ListingPatch) error {
+	if s.Monitor() {
+		return errMonitor
+	}
+	if s.ro {
+		return errReadOnly
+	}
+	if s.vast == nil {
+		return errNoVastOps
+	}
+	if s.dry {
+		s.log.Info("dry-run: would update vast listing", "actor", actor, "machine", machineID)
+		s.auditRecord(actor, "vast_listing", map[string]any{"machine": machineID}, "dry-run")
+		return nil
+	}
+	if err := s.vast.UpdateListing(ctx, machineID, p); err != nil {
+		return err
+	}
+	s.auditRecord(actor, "vast_listing", map[string]any{"machine": machineID}, "ok")
+	return nil
+}
+
+// UnlistVastMachine unlists a machine (off the market), respecting the gates.
+func (s *Service) UnlistVastMachine(ctx context.Context, actor string, machineID int) error {
+	if s.Monitor() {
+		return errMonitor
+	}
+	if s.ro {
+		return errReadOnly
+	}
+	if s.vast == nil {
+		return errNoVastOps
+	}
+	if s.dry {
+		s.log.Info("dry-run: would unlist vast machine", "actor", actor, "machine", machineID)
+		s.auditRecord(actor, "vast_unlist", map[string]any{"machine": machineID}, "dry-run")
+		return nil
+	}
+	if err := s.vast.UnlistMachine(ctx, machineID); err != nil {
+		return err
+	}
+	s.auditRecord(actor, "vast_unlist", map[string]any{"machine": machineID}, "ok")
+	return nil
+}
+
+// ScheduleVastMaintenance schedules a maintenance window, respecting the gates.
+func (s *Service) ScheduleVastMaintenance(ctx context.Context, actor string, machineID int, sdateUnix int64, durationHours float64, category string) error {
+	if s.Monitor() {
+		return errMonitor
+	}
+	if s.ro {
+		return errReadOnly
+	}
+	if s.vast == nil {
+		return errNoVastOps
+	}
+	if s.dry {
+		s.log.Info("dry-run: would schedule maintenance", "actor", actor, "machine", machineID, "category", category)
+		s.auditRecord(actor, "vast_maintenance", map[string]any{"machine": machineID, "category": category}, "dry-run")
+		return nil
+	}
+	if err := s.vast.ScheduleMaintenance(ctx, machineID, sdateUnix, durationHours, category); err != nil {
+		return err
+	}
+	s.auditRecord(actor, "vast_maintenance", map[string]any{"machine": machineID, "category": category}, "ok")
+	return nil
 }
 
 // SetDryRun toggles dry-run at runtime (hot-apply).

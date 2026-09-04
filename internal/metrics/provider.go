@@ -45,6 +45,30 @@ const (
 	FanModeFull = "Full"
 )
 
+// ListingPatch describes a partial listing update for a Vast.ai machine.
+// Nil fields are left unchanged.
+type ListingPatch struct {
+	PriceGpu      *float64 // $/h per GPU
+	PriceDisk     *float64 // $/GB/month
+	PriceInetUp   *float64 // $/GB upload bandwidth
+	PriceInetDown *float64 // $/GB download bandwidth
+	PriceMinBid   *float64 // $/h minimum bid floor
+	EndDateUnix   *int64   // listing expiration (unix seconds)
+}
+
+// VastOps performs host-side writes against the Vast.ai platform (listing
+// prices, unlisting, maintenance scheduling). Separate from Controller so the
+// fan-control service stays fan-focused; the control layer gates both the same
+// way (monitor/dry-run/audit).
+type VastOps interface {
+	// UpdateListing updates a machine's listing via `vastai list machines`.
+	UpdateListing(ctx context.Context, machineID int, p ListingPatch) error
+	// UnlistMachine removes the machine's ask contracts (off the market).
+	UnlistMachine(ctx context.Context, machineID int) error
+	// ScheduleMaintenance notifies renters of a maintenance window.
+	ScheduleMaintenance(ctx context.Context, machineID int, sdateUnix int64, durationHours float64, category string) error
+}
+
 // FanProfile mirrors the BMC FanprofileService profile shape.
 type FanProfile struct {
 	Name     string   `json:"name"`

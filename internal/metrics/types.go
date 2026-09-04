@@ -104,19 +104,24 @@ type Net struct {
 // lists; contract end dates are the renter contracts (client) and the machine
 // listing (end). Never includes secrets or the machine's public IP.
 type VastRig struct {
-	ID             int     `json:"id"`
-	Hostname       string  `json:"hostname"`
-	GPUName        string  `json:"gpuName"`
-	NumGPUs        int     `json:"numGpus"`
-	ListedGPUCost  float64 `json:"listedGpuCost"` // $/h listed for the GPU
-	EarnHour       float64 `json:"earnHour"`      // $/h currently earned
-	EarnDay        float64 `json:"earnDay"`       // $/day currently earned
-	RentalsRunning int     `json:"rentalsRunning"`
-	ClientEndDate  float64 `json:"clientEndDate"` // unix seconds, 0 = none
-	EndDate        float64 `json:"endDate"`       // unix seconds, 0 = none
-	Verification   string  `json:"verification"`
-	Reliability    float64 `json:"reliability"` // 0..1
-	Geolocation    string  `json:"geolocation"`
+	ID                 int     `json:"id"`
+	Hostname           string  `json:"hostname"`
+	GPUName            string  `json:"gpuName"`
+	NumGPUs            int     `json:"numGpus"`
+	ListedGPUCost      float64 `json:"listedGpuCost"`      // $/h listed for the GPU
+	ListedStorageCost  float64 `json:"listedStorageCost"`  // $/GB/month
+	ListedInetUpCost   float64 `json:"listedInetUpCost"`   // $/GB upload
+	ListedInetDownCost float64 `json:"listedInetDownCost"` // $/GB download
+	MinBidPrice        float64 `json:"minBidPrice"`        // $/h minimum bid floor
+	EarnHour           float64 `json:"earnHour"`           // $/h currently earned
+	EarnDay            float64 `json:"earnDay"`            // $/day currently earned
+	RentalsRunning     int     `json:"rentalsRunning"`
+	ClientEndDate      float64 `json:"clientEndDate"` // unix seconds, 0 = none
+	EndDate            float64 `json:"endDate"`       // unix seconds, 0 = none
+	Verification       string  `json:"verification"`
+	Reliability        float64 `json:"reliability"` // 0..1
+	Geolocation        string  `json:"geolocation"`
+	Maintenance        string  `json:"maintenance,omitempty"` // maintenance state, "" = none
 }
 
 // Container is a read-only summary of one Docker container on the rig — the

@@ -88,6 +88,10 @@ export interface VastRig {
   gpuName: string
   numGpus: number
   listedGpuCost: number
+  listedStorageCost: number
+  listedInetUpCost: number
+  listedInetDownCost: number
+  minBidPrice: number
   earnHour: number
   earnDay: number
   rentalsRunning: number
@@ -96,6 +100,7 @@ export interface VastRig {
   verification: string
   reliability: number
   geolocation: string
+  maintenance?: string
 }
 
 export interface Container {

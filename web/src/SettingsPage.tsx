@@ -400,6 +400,10 @@ function sourceFor(type: string): keyof Sources | null {
       return 'vast'
     case 'vastmarket':
       return 'vast'
+    case 'vastlisting':
+      return 'vast'
+    case 'maintenance':
+      return 'vast'
     case 'docker':
       return 'docker'
     default:
@@ -421,6 +425,8 @@ function labelFor(type: string): string {
     net: 'Network',
     vast: 'Vast rigs',
     vastmarket: 'GPU market',
+    vastlisting: 'Vast listing',
+    maintenance: 'Maintenance',
     docker: 'Docker instances',
   }
   return labels[type] ?? type

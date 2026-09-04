@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -158,8 +159,16 @@ func (p *Provider) run(ctx context.Context, args ...string) ([]byte, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return nil, fmt.Errorf("vast %s: %w (%s)", p.opts.CLI, err, msg)
+		outMsg := strings.TrimSpace(string(out))
+		detail := msg
+		if outMsg != "" {
+			if detail != "" {
+				detail += "; "
+			}
+			detail += outMsg
+		}
+		if detail != "" {
+			return nil, fmt.Errorf("vast %s: %w (%s)", p.opts.CLI, err, detail)
 		}
 		return nil, fmt.Errorf("vast %s: %w", p.opts.CLI, err)
 	}
@@ -184,19 +193,24 @@ func readSecret(ref string) (string, error) {
 
 // rawMachine mirrors the fields of `vastai show machines --raw` that we use.
 type rawMachine struct {
-	ID             int      `json:"id"`
-	Hostname       string   `json:"hostname"`
-	GPUName        string   `json:"gpu_name"`
-	NumGPUs        int      `json:"num_gpus"`
-	ListedGPUCost  *float64 `json:"listed_gpu_cost"`
-	EarnHour       float64  `json:"earn_hour"`
-	EarnDay        float64  `json:"earn_day"`
-	RentalsRunning int      `json:"current_rentals_running"`
-	ClientEndDate  float64  `json:"client_end_date"`
-	EndDate        float64  `json:"end_date"`
-	Verification   string   `json:"verification"`
-	Reliability    float64  `json:"reliability2"`
-	Geolocation    string   `json:"geolocation"`
+	ID                 int      `json:"id"`
+	Hostname           string   `json:"hostname"`
+	GPUName            string   `json:"gpu_name"`
+	NumGPUs            int      `json:"num_gpus"`
+	ListedGPUCost      *float64 `json:"listed_gpu_cost"`
+	ListedStorage      *float64 `json:"listed_storage_cost"`
+	ListedInetUp       *float64 `json:"listed_inet_up_cost"`
+	ListedInetDown     *float64 `json:"listed_inet_down_cost"`
+	MinBidPrice        *float64 `json:"min_bid_price"`
+	EarnHour           float64  `json:"earn_hour"`
+	EarnDay            float64  `json:"earn_day"`
+	RentalsRunning     int      `json:"current_rentals_running"`
+	ClientEndDate      float64  `json:"client_end_date"`
+	EndDate            float64  `json:"end_date"`
+	Verification       string   `json:"verification"`
+	Reliability        float64  `json:"reliability2"`
+	Geolocation        string   `json:"geolocation"`
+	MachineMaintenance *string  `json:"machine_maintenance"`
 }
 
 // rawGpuMetric mirrors the fields of `vastai metrics gpu --raw` that we use.
@@ -252,25 +266,173 @@ func parseMachines(data []byte) ([]metrics.VastRig, error) {
 	}
 	rigs := make([]metrics.VastRig, 0, len(parsed.Machines))
 	for _, m := range parsed.Machines {
-		var listed float64
+		var listed, storage, inetUp, inetDown, minBid float64
 		if m.ListedGPUCost != nil {
 			listed = *m.ListedGPUCost
 		}
+		if m.ListedStorage != nil {
+			storage = *m.ListedStorage
+		}
+		if m.ListedInetUp != nil {
+			inetUp = *m.ListedInetUp
+		}
+		if m.ListedInetDown != nil {
+			inetDown = *m.ListedInetDown
+		}
+		if m.MinBidPrice != nil {
+			minBid = *m.MinBidPrice
+		}
+		maintenance := ""
+		if m.MachineMaintenance != nil {
+			maintenance = *m.MachineMaintenance
+		}
 		rigs = append(rigs, metrics.VastRig{
-			ID:             m.ID,
-			Hostname:       m.Hostname,
-			GPUName:        m.GPUName,
-			NumGPUs:        m.NumGPUs,
-			ListedGPUCost:  listed,
-			EarnHour:       m.EarnHour,
-			EarnDay:        m.EarnDay,
-			RentalsRunning: m.RentalsRunning,
-			ClientEndDate:  m.ClientEndDate,
-			EndDate:        m.EndDate,
-			Verification:   m.Verification,
-			Reliability:    m.Reliability,
-			Geolocation:    m.Geolocation,
+			ID:                 m.ID,
+			Hostname:           m.Hostname,
+			GPUName:            m.GPUName,
+			NumGPUs:            m.NumGPUs,
+			ListedGPUCost:      listed,
+			ListedStorageCost:  storage,
+			ListedInetUpCost:   inetUp,
+			ListedInetDownCost: inetDown,
+			MinBidPrice:        minBid,
+			EarnHour:           m.EarnHour,
+			EarnDay:            m.EarnDay,
+			RentalsRunning:     m.RentalsRunning,
+			ClientEndDate:      m.ClientEndDate,
+			EndDate:            m.EndDate,
+			Verification:       m.Verification,
+			Reliability:        m.Reliability,
+			Geolocation:        m.Geolocation,
+			Maintenance:        maintenance,
 		})
 	}
 	return rigs, nil
+}
+
+// Controller performs host-side writes against the Vast.ai platform via the
+// vastai CLI (listing updates, unlisting, maintenance scheduling). It
+// implements metrics.VastOps; the control layer applies the safety gates.
+type Controller struct {
+	cli        string
+	apiKeyPath string
+}
+
+// NewController builds a Vast.ai write controller.
+func NewController(cli, apiKeyPath string) *Controller {
+	if cli == "" {
+		cli = "vastai"
+	}
+	return &Controller{cli: cli, apiKeyPath: apiKeyPath}
+}
+
+// run executes the vastai CLI once with the configured API key.
+func (c *Controller) run(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, c.cli, args...)
+	if c.apiKeyPath != "" {
+		key, err := readSecret(c.apiKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("read vast api key: %w", err)
+		}
+		cmd.Env = append(os.Environ(), "VAST_API_KEY="+key)
+		cmd.Args = append(cmd.Args, "--api-key", key)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		// The vastai CLI reports "no error" as "[None]" on stderr and still
+		// exits non-zero after a successful listing/maintenance update.
+		if msg == "[None]" || strings.EqualFold(msg, "None") {
+			return out, nil
+		}
+		outMsg := strings.TrimSpace(string(out))
+		detail := msg
+		if outMsg != "" {
+			if detail != "" {
+				detail += "; "
+			}
+			detail += outMsg
+		}
+		if detail != "" {
+			return nil, fmt.Errorf("vast %s: %w (%s)", c.cli, err, detail)
+		}
+		return nil, fmt.Errorf("vast %s: %w", c.cli, err)
+	}
+	return out, nil
+}
+
+// UpdateListing implements metrics.VastOps via `vastai list machines`.
+func (c *Controller) UpdateListing(ctx context.Context, machineID int, p metrics.ListingPatch) error {
+	args := []string{"list", "machines", strconv.Itoa(machineID)}
+	if p.PriceGpu != nil {
+		if *p.PriceGpu <= 0 {
+			return fmt.Errorf("price_gpu must be > 0")
+		}
+		args = append(args, "--price_gpu", strconv.FormatFloat(*p.PriceGpu, 'f', -1, 64))
+	}
+	if p.PriceDisk != nil {
+		if *p.PriceDisk < 0 {
+			return fmt.Errorf("price_disk must be >= 0")
+		}
+		args = append(args, "--price_disk", strconv.FormatFloat(*p.PriceDisk, 'f', -1, 64))
+	}
+	if p.PriceInetUp != nil {
+		if *p.PriceInetUp < 0 {
+			return fmt.Errorf("price_inetu must be >= 0")
+		}
+		args = append(args, "--price_inetu", strconv.FormatFloat(*p.PriceInetUp, 'f', -1, 64))
+	}
+	if p.PriceInetDown != nil {
+		if *p.PriceInetDown < 0 {
+			return fmt.Errorf("price_inetd must be >= 0")
+		}
+		args = append(args, "--price_inetd", strconv.FormatFloat(*p.PriceInetDown, 'f', -1, 64))
+	}
+	if p.PriceMinBid != nil {
+		if *p.PriceMinBid < 0 {
+			return fmt.Errorf("price_min_bid must be >= 0")
+		}
+		args = append(args, "--price_min_bid", strconv.FormatFloat(*p.PriceMinBid, 'f', -1, 64))
+	}
+	if p.EndDateUnix != nil {
+		args = append(args, "--end_date", strconv.FormatInt(*p.EndDateUnix, 10))
+	}
+	if len(args) == 3 {
+		return fmt.Errorf("nothing to update")
+	}
+	if _, err := c.run(ctx, args...); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UnlistMachine implements metrics.VastOps via `vastai unlist machine`.
+func (c *Controller) UnlistMachine(ctx context.Context, machineID int) error {
+	_, err := c.run(ctx, "unlist", "machine", strconv.Itoa(machineID))
+	return err
+}
+
+// validMaintenanceCategories are the values Vast accepts.
+var validMaintenanceCategories = map[string]bool{
+	"power": true, "internet": true, "disk": true, "gpu": true, "software": true, "other": true,
+}
+
+// ScheduleMaintenance implements metrics.VastOps via `vastai schedule maint`.
+func (c *Controller) ScheduleMaintenance(ctx context.Context, machineID int, sdateUnix int64, durationHours float64, category string) error {
+	if !validMaintenanceCategories[category] {
+		return fmt.Errorf("invalid maintenance category %q", category)
+	}
+	if sdateUnix <= 0 || durationHours <= 0 {
+		return fmt.Errorf("sdate and duration must be positive")
+	}
+	args := []string{
+		"schedule", "maint", strconv.Itoa(machineID),
+		"--sdate", strconv.FormatInt(sdateUnix, 10),
+		"--duration", strconv.FormatFloat(durationHours, 'f', -1, 64),
+		"--maintenance_category", category,
+	}
+	_, err := c.run(ctx, args...)
+	return err
 }

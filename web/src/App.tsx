@@ -24,10 +24,12 @@ import { TempsWidget } from './widgets/TempsWidget'
 import { TempsGraphWidget } from './widgets/TempsGraphWidget'
 import { VastWidget } from './widgets/VastWidget'
 import { VastMarketWidget } from './widgets/VastMarketWidget'
+import { VastListingWidget } from './widgets/VastListingWidget'
+import { MaintenanceWidget } from './widgets/MaintenanceWidget'
 import { DockerWidget } from './widgets/DockerWidget'
 import { FansWidget } from './widgets/FansWidget'
 
-export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast' | 'vastmarket' | 'docker'
+export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast' | 'vastmarket' | 'vastlisting' | 'maintenance' | 'docker'
 
 interface WidgetDef {
   id: string
@@ -160,6 +162,8 @@ export default function App() {
     { id: 'volts', type: 'volts' },
     { id: 'vast', type: 'vast' },
     { id: 'vastmarket', type: 'vastmarket' },
+    { id: 'vastlisting', type: 'vastlisting' },
+    { id: 'maintenance', type: 'maintenance' },
     { id: 'docker', type: 'docker' },
   ]
 
@@ -335,6 +339,8 @@ export default function App() {
       { id: 'vast', x: 0, y: 18, w: 6, h: 4 },
       { id: 'vastmarket', x: 6, y: 18, w: 6, h: 4 },
       { id: 'docker', x: 0, y: 22, w: 6, h: 4 },
+      { id: 'vastlisting', x: 6, y: 22, w: 6, h: 5 },
+      { id: 'maintenance', x: 0, y: 26, w: 6, h: 3 },
     ]
   }
 
@@ -403,6 +409,10 @@ export default function App() {
         return <VastWidget snap={snap} />
       case 'vastmarket':
         return <VastMarketWidget snap={snap} />
+      case 'vastlisting':
+        return <VastListingWidget snap={snap} admin={admin} monitor={monitor} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} />
+      case 'maintenance':
+        return <MaintenanceWidget snap={snap} admin={admin} monitor={monitor} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} />
       case 'docker':
         return <DockerWidget snap={snap} />
       default:
@@ -553,6 +563,8 @@ function sourceFor(type: string): 'bmc' | 'gpu' | 'vast' | 'docker' | null {
       return 'bmc'
     case 'vast':
     case 'vastmarket':
+    case 'vastlisting':
+    case 'maintenance':
       return 'vast'
     case 'docker':
       return 'docker'

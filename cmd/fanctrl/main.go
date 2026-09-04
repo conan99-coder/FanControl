@@ -76,6 +76,15 @@ func main() {
 
 	// --- Providers ---
 	providers, ctrl := buildProviders(cfg, log)
+	var vastOps metrics.VastOps
+	if cfg.Vast.Enabled && cfg.Provider != "mock" {
+		vastOps = vast.NewController(cfg.Vast.CLI, cfg.Vast.APIKeyPath)
+	} else if cfg.Provider == "mock" && cfg.Vast.Enabled {
+		// The mock emulates Vast host-ops too, for local dev.
+		if mc, ok := ctrl.(metrics.VastOps); ok {
+			vastOps = mc
+		}
+	}
 
 	// --- History ring ---
 	hist := poller.NewRing(cfg.History.Points)
@@ -94,6 +103,7 @@ func main() {
 		DryRun:   cfg.DryRun,
 		ReadOnly: cfg.ReadOnly,
 		Audit:    audit,
+		VastOps:  vastOps,
 	}, log)
 
 	// --- Auth ---
@@ -109,6 +119,15 @@ func main() {
 		p.SetProviders(provs)
 		p.SetThresholds(newCfg.Thresholds)
 		ctrlSvc.SetController(ctrlNew)
+		var vops metrics.VastOps
+		if newCfg.Vast.Enabled && newCfg.Provider != "mock" {
+			vops = vast.NewController(newCfg.Vast.CLI, newCfg.Vast.APIKeyPath)
+		} else if newCfg.Provider == "mock" && newCfg.Vast.Enabled {
+			if mc, ok := ctrlNew.(metrics.VastOps); ok {
+				vops = mc
+			}
+		}
+		ctrlSvc.SetVastOps(vops)
 		ctrlSvc.SetDryRun(newCfg.DryRun)
 		ctrlSvc.SetReadOnly(newCfg.ReadOnly)
 		authStore.ReplaceUsers(newCfg.Auth.Users)

@@ -244,6 +244,8 @@ func DefaultLayout() []Widget {
 		{ID: "vast", Type: "vast", X: 0, Y: 18, W: 6, H: 4, Show: true},
 		{ID: "vastmarket", Type: "vastmarket", X: 6, Y: 18, W: 6, H: 4, Show: true},
 		{ID: "docker", Type: "docker", X: 0, Y: 22, W: 6, H: 4, Show: true},
+		{ID: "vastlisting", Type: "vastlisting", X: 6, Y: 22, W: 6, H: 5, Show: true},
+		{ID: "maintenance", Type: "maintenance", X: 0, Y: 27, W: 6, H: 3, Show: true},
 	}
 }
 

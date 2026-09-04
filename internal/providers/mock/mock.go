@@ -142,7 +142,7 @@ func (p *Provider) Collect(_ context.Context) (metrics.Snapshot, error) {
 			{Name: "Uptime", Value: now.Sub(p.start).Seconds(), Unit: "s", Kind: metrics.KindCount},
 		},
 		VastRigs: []metrics.VastRig{
-			{ID: 148260, Hostname: "endif01", GPUName: "RTX PRO 6000 WS", NumGPUs: 2, ListedGPUCost: 1.3, EarnHour: 1.87 + 0.15*math.Sin(float64(p.tick)/60), EarnDay: 44.9 + 3.6*math.Sin(float64(p.tick)/60), RentalsRunning: 2, ClientEndDate: float64(now.Add(36 * 24 * time.Hour).Unix()), EndDate: float64(now.Add(60 * 24 * time.Hour).Unix()), Verification: "verified", Reliability: 0.979, Geolocation: "Sweden, SE"},
+			{ID: 148260, Hostname: "endif01", GPUName: "RTX PRO 6000 WS", NumGPUs: 2, ListedGPUCost: 1.3, ListedStorageCost: 0.2, ListedInetUpCost: 0.0195, ListedInetDownCost: 0.0195, MinBidPrice: 0.9, EarnHour: 1.87 + 0.15*math.Sin(float64(p.tick)/60), EarnDay: 44.9 + 3.6*math.Sin(float64(p.tick)/60), RentalsRunning: 2, ClientEndDate: float64(now.Add(36 * 24 * time.Hour).Unix()), EndDate: float64(now.Add(60 * 24 * time.Hour).Unix()), Verification: "verified", Reliability: 0.979, Geolocation: "Sweden, SE"},
 		},
 		VastGpus: []metrics.VastGpu{
 			{Name: "RTX 5090", RentedVerified: 5810, AvailVerified: 1182, Usage: 83.1, PriceP10: 0.295, PriceMedian: 0.34, PriceP90: 0.6552, TFLOPSPerDollar: 321.2},
@@ -257,5 +257,38 @@ func (c *Controller) SetGPUPowerLimit(_ context.Context, gpuIndex int, watts flo
 		return fmt.Errorf("mock: write failure injected")
 	}
 	c.Writes = append(c.Writes, fmt.Sprintf("set GPU %d power limit -> %.0fW", gpuIndex, watts))
+	return nil
+}
+
+// UpdateListing implements metrics.VastOps (fake: records the write).
+func (c *Controller) UpdateListing(_ context.Context, machineID int, p metrics.ListingPatch) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.FailWrites {
+		return fmt.Errorf("mock: write failure injected")
+	}
+	c.Writes = append(c.Writes, fmt.Sprintf("update listing machine %d: %+v", machineID, p))
+	return nil
+}
+
+// UnlistMachine implements metrics.VastOps (fake: records the write).
+func (c *Controller) UnlistMachine(_ context.Context, machineID int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.FailWrites {
+		return fmt.Errorf("mock: write failure injected")
+	}
+	c.Writes = append(c.Writes, fmt.Sprintf("unlist machine %d", machineID))
+	return nil
+}
+
+// ScheduleMaintenance implements metrics.VastOps (fake: records the write).
+func (c *Controller) ScheduleMaintenance(_ context.Context, machineID int, sdateUnix int64, durationHours float64, category string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.FailWrites {
+		return fmt.Errorf("mock: write failure injected")
+	}
+	c.Writes = append(c.Writes, fmt.Sprintf("schedule maintenance machine %d @%d %.1fh %s", machineID, sdateUnix, durationHours, category))
 	return nil
 }

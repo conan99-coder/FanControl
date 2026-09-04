@@ -212,6 +212,23 @@ export function setGPUPower(gpu: number, watts: number): Promise<{ ok: string }>
   return json('/api/gpu/power', { method: 'POST', body: JSON.stringify({ gpu, watts }) })
 }
 
+// ---- Vast host-ops (admin, gated by Control mode + dry-run) ----
+
+export function updateVastListing(
+  machineId: number,
+  patch: { priceGpu?: number; priceDisk?: number; priceInetUp?: number; priceInetDown?: number; priceMinBid?: number; endDateUnix?: number }
+): Promise<{ ok: string }> {
+  return json('/api/vast/listing', { method: 'POST', body: JSON.stringify({ machineId, ...patch }) })
+}
+
+export function unlistVastMachine(machineId: number): Promise<{ ok: string }> {
+  return json('/api/vast/unlist', { method: 'POST', body: JSON.stringify({ machineId }) })
+}
+
+export function scheduleVastMaintenance(machineId: number, sdateUnix: number, durationHours: number, category: string): Promise<{ ok: string }> {
+  return json('/api/vast/maintenance', { method: 'POST', body: JSON.stringify({ machineId, sdateUnix, durationHours, category }) })
+}
+
 // streamMetrics opens a live update stream and invokes cb on each snapshot.
 //
 // Implemented with fetch + a body reader instead of EventSource: EventSource

@@ -107,6 +107,9 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/fan/duty", s.adminWrap(s.method("POST", s.handleSetDuty)))
 	s.mux.Handle("/api/fan/gpu", s.adminWrap(s.method("POST", s.handleSetGPUFan)))
 	s.mux.Handle("/api/gpu/power", s.adminWrap(s.method("POST", s.handleSetGPUPower)))
+	s.mux.Handle("/api/vast/listing", s.adminWrap(s.method("POST", s.handleVastListing)))
+	s.mux.Handle("/api/vast/unlist", s.adminWrap(s.method("POST", s.handleVastUnlist)))
+	s.mux.Handle("/api/vast/maintenance", s.adminWrap(s.method("POST", s.handleVastMaintenance)))
 	s.mux.Handle("/api/audit", s.adminWrap(http.HandlerFunc(s.handleAudit)))
 
 	// SSE stream
@@ -443,6 +446,71 @@ func (s *Server) handleSetGPUPower(w http.ResponseWriter, r *http.Request) {
 	}
 	sess, _ := sessionFrom(r.Context())
 	if err := s.ctrl.SetGPUPowerLimit(r.Context(), sess.User, req.GPU, req.Watts); err != nil {
+		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleVastListing updates a machine's listing (prices/expiration).
+func (s *Server) handleVastListing(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MachineID     int      `json:"machineId"`
+		PriceGpu      *float64 `json:"priceGpu"`
+		PriceDisk     *float64 `json:"priceDisk"`
+		PriceInetUp   *float64 `json:"priceInetUp"`
+		PriceInetDown *float64 `json:"priceInetDown"`
+		PriceMinBid   *float64 `json:"priceMinBid"`
+		EndDateUnix   *int64   `json:"endDateUnix"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MachineID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machineId required"})
+		return
+	}
+	sess, _ := sessionFrom(r.Context())
+	if err := s.ctrl.SetVastListing(r.Context(), sess.User, req.MachineID, metrics.ListingPatch{
+		PriceGpu: req.PriceGpu, PriceDisk: req.PriceDisk,
+		PriceInetUp: req.PriceInetUp, PriceInetDown: req.PriceInetDown,
+		PriceMinBid: req.PriceMinBid,
+		EndDateUnix: req.EndDateUnix,
+	}); err != nil {
+		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleVastUnlist removes a machine's listing.
+func (s *Server) handleVastUnlist(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MachineID int `json:"machineId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MachineID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machineId required"})
+		return
+	}
+	sess, _ := sessionFrom(r.Context())
+	if err := s.ctrl.UnlistVastMachine(r.Context(), sess.User, req.MachineID); err != nil {
+		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleVastMaintenance schedules a maintenance window.
+func (s *Server) handleVastMaintenance(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MachineID     int     `json:"machineId"`
+		SdateUnix     int64   `json:"sdateUnix"`
+		DurationHours float64 `json:"durationHours"`
+		Category      string  `json:"category"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MachineID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "machineId required"})
+		return
+	}
+	sess, _ := sessionFrom(r.Context())
+	if err := s.ctrl.ScheduleVastMaintenance(r.Context(), sess.User, req.MachineID, req.SdateUnix, req.DurationHours, req.Category); err != nil {
 		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
 		return
 	}
