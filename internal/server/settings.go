@@ -111,6 +111,9 @@ type settingsDTO struct {
 	VastAPIKeyPath string `json:"vastApiKeyPath"`
 	VastHasKey     bool   `json:"vastHasKey"`
 	VastInterval   string `json:"vastInterval"`
+	// VastMarketFilter is a comma-separated list of GPU names for the market
+	// widget (empty = all).
+	VastMarketFilter string `json:"vastMarketFilter"`
 
 	DockerEnabled  bool   `json:"dockerEnabled"`
 	DockerCLI      string `json:"dockerCli"`
@@ -145,10 +148,11 @@ type patchDTO struct {
 	GPUQuery         *string `json:"gpuQuery"`
 	GPUQueryInterval *string `json:"gpuQueryInterval"`
 
-	VastEnabled    *bool   `json:"vastEnabled"`
-	VastCLI        *string `json:"vastCli"`
-	VastAPIKeyPath *string `json:"vastApiKeyPath"`
-	VastInterval   *string `json:"vastInterval"`
+	VastEnabled      *bool   `json:"vastEnabled"`
+	VastCLI          *string `json:"vastCli"`
+	VastAPIKeyPath   *string `json:"vastApiKeyPath"`
+	VastInterval     *string `json:"vastInterval"`
+	VastMarketFilter *string `json:"vastMarketFilter"`
 
 	DockerEnabled  *bool   `json:"dockerEnabled"`
 	DockerCLI      *string `json:"dockerCli"`
@@ -196,6 +200,7 @@ func (s *Settings) dto() settingsDTO {
 		VastAPIKeyPath:                 cfg.Vast.APIKeyPath,
 		VastHasKey:                     config.SecretConfigured(cfg.Vast.APIKeyPath),
 		VastInterval:                   cfg.Vast.Interval.String(),
+		VastMarketFilter:               strings.Join(cfg.Vast.MarketFilter, ", "),
 		DockerEnabled:                  cfg.Docker.Enabled,
 		DockerCLI:                      cfg.Docker.CLI,
 		DockerInterval:                 cfg.Docker.Interval.String(),
@@ -298,6 +303,15 @@ func applyPatch(cfg *config.Config, p patchDTO) error {
 	setStr(&cfg.Vast.APIKeyPath, p.VastAPIKeyPath)
 	if err := setDur(&cfg.Vast.Interval, p.VastInterval); err != nil {
 		return err
+	}
+	if p.VastMarketFilter != nil {
+		var filter []string
+		for _, part := range strings.Split(*p.VastMarketFilter, ",") {
+			if name := strings.TrimSpace(part); name != "" {
+				filter = append(filter, name)
+			}
+		}
+		cfg.Vast.MarketFilter = filter
 	}
 
 	setBool(&cfg.Docker.Enabled, p.DockerEnabled)
@@ -526,7 +540,7 @@ func patchSummary(p patchDTO) []string {
 	add("bmcUsername", p.BMCUsername != nil)
 	add("bmcProfile", p.BMCProfile != nil)
 	add("gpu", p.GPUEnabled != nil || p.GPUQuery != nil || p.GPUQueryInterval != nil)
-	add("vast", p.VastEnabled != nil || p.VastCLI != nil || p.VastAPIKeyPath != nil || p.VastInterval != nil)
+	add("vast", p.VastEnabled != nil || p.VastCLI != nil || p.VastAPIKeyPath != nil || p.VastInterval != nil || p.VastMarketFilter != nil)
 	add("docker", p.DockerEnabled != nil || p.DockerCLI != nil || p.DockerInterval != nil)
 	add("thresholds", p.Thresholds != nil)
 	add("widgets", p.Widgets != nil)

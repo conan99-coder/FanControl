@@ -135,6 +135,7 @@ export interface Settings {
   vastApiKeyPath: string
   vastHasKey: boolean
   vastInterval: string
+  vastMarketFilter: string
   dockerEnabled: boolean
   dockerCli: string
   dockerInterval: string

@@ -144,6 +144,10 @@ func (p *Provider) Collect(_ context.Context) (metrics.Snapshot, error) {
 		VastRigs: []metrics.VastRig{
 			{ID: 148260, Hostname: "endif01", GPUName: "RTX PRO 6000 WS", NumGPUs: 2, ListedGPUCost: 1.3, EarnHour: 1.87 + 0.15*math.Sin(float64(p.tick)/60), EarnDay: 44.9 + 3.6*math.Sin(float64(p.tick)/60), RentalsRunning: 2, ClientEndDate: float64(now.Add(36 * 24 * time.Hour).Unix()), EndDate: float64(now.Add(60 * 24 * time.Hour).Unix()), Verification: "verified", Reliability: 0.979, Geolocation: "Sweden, SE"},
 		},
+		VastGpus: []metrics.VastGpu{
+			{Name: "RTX 5090", RentedVerified: 5810, AvailVerified: 1182, Usage: 83.1, PriceP10: 0.295, PriceMedian: 0.34, PriceP90: 0.6552, TFLOPSPerDollar: 321.2},
+			{Name: "RTX PRO 6000 WS", RentedVerified: 520, AvailVerified: 57, Usage: 90.1, PriceP10: 0.8895, PriceMedian: 1.0725, PriceP90: 1.445, TFLOPSPerDollar: 111.0},
+		},
 		Containers: []metrics.Container{
 			{ID: "3f2a1b0c9d8e", Name: "C.49321308", Image: "pytorch/pytorch:2.4.0-cuda12.4", Status: "Up 36 hours", CPUsPct: 42.5, MemUsedBytes: 1.2e9, MemTotalBytes: 62e9},
 			{ID: "9e8d7c6b5a4f", Name: "C.49321247", Image: "nvidia/cuda:11.0.3-devel-ubuntu18.04", Status: "Up 36 hours", CPUsPct: 18.2, MemUsedBytes: 0.5e9, MemTotalBytes: 62e9},

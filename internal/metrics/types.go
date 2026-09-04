@@ -133,6 +133,19 @@ type Container struct {
 	MemTotalBytes float64 `json:"memTotalBytes"` // 0 if unknown
 }
 
+// VastGpu is one row of the Vast.ai GPU marketplace metrics (supply, demand,
+// pricing per GPU type) from `vastai metrics gpu`.
+type VastGpu struct {
+	Name            string  `json:"name"`
+	RentedVerified  int     `json:"rentedVerified"`
+	AvailVerified   int     `json:"availVerified"`
+	Usage           float64 `json:"usage"` // current utilization %
+	PriceP10        float64 `json:"priceP10"`
+	PriceMedian     float64 `json:"priceMedian"`
+	PriceP90        float64 `json:"priceP90"`
+	TFLOPSPerDollar float64 `json:"tflopsPerDollar"`
+}
+
 // Snapshot is the complete telemetry picture for one poll tick.
 type Snapshot struct {
 	Time       time.Time   `json:"time"`
@@ -145,6 +158,7 @@ type Snapshot struct {
 	Thermals   []Thermal   `json:"thermals"`
 	Extra      []Scalar    `json:"extra"`
 	VastRigs   []VastRig   `json:"vastRigs"`
+	VastGpus   []VastGpu   `json:"vastGpus"`
 	Containers []Container `json:"containers"`
 }
 

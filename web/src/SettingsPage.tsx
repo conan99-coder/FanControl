@@ -247,6 +247,9 @@ export function SettingsPage({
             <Field label="Vast refresh interval">
               <input value={form.vastInterval} onChange={(e) => up({ vastInterval: e.target.value })} className={inp} />
             </Field>
+            <Field label="GPU market filter" hint='Comma-separated GPU name prefixes (begins with, case-insensitive). "RTX PRO 6000" matches RTX PRO 6000 WS and RTX PRO 6000 S. Empty = all GPU types.'>
+              <input value={form.vastMarketFilter ?? ''} onChange={(e) => up({ vastMarketFilter: e.target.value })} className={inp} placeholder="RTX 5090, RTX PRO 6000" />
+            </Field>
             <div className="flex gap-2 items-center">
               <button className={btn} disabled={!vastKey} onClick={runVastTest}>Test API key</button>
               {testResult && <span className="text-xs text-(--text-muted)">{testResult}</span>}
@@ -395,6 +398,8 @@ function sourceFor(type: string): keyof Sources | null {
       return 'bmc'
     case 'vast':
       return 'vast'
+    case 'vastmarket':
+      return 'vast'
     case 'docker':
       return 'docker'
     default:
@@ -415,6 +420,7 @@ function labelFor(type: string): string {
     volts: 'Voltages',
     net: 'Network',
     vast: 'Vast rigs',
+    vastmarket: 'GPU market',
     docker: 'Docker instances',
   }
   return labels[type] ?? type

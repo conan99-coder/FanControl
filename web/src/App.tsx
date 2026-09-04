@@ -23,10 +23,11 @@ import { VoltsWidget } from './widgets/VoltsWidget'
 import { TempsWidget } from './widgets/TempsWidget'
 import { TempsGraphWidget } from './widgets/TempsGraphWidget'
 import { VastWidget } from './widgets/VastWidget'
+import { VastMarketWidget } from './widgets/VastMarketWidget'
 import { DockerWidget } from './widgets/DockerWidget'
 import { FansWidget } from './widgets/FansWidget'
 
-export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast' | 'docker'
+export type WidgetType = 'summary' | 'cpu' | 'gpu' | 'disk' | 'drives' | 'net' | 'temps' | 'tempsgraph' | 'fans' | 'volts' | 'vast' | 'vastmarket' | 'docker'
 
 interface WidgetDef {
   id: string
@@ -158,6 +159,7 @@ export default function App() {
     { id: 'net', type: 'net' },
     { id: 'volts', type: 'volts' },
     { id: 'vast', type: 'vast' },
+    { id: 'vastmarket', type: 'vastmarket' },
     { id: 'docker', type: 'docker' },
   ]
 
@@ -331,7 +333,8 @@ export default function App() {
       { id: 'volts', x: 0, y: 16, w: 6, h: 2 },
       { id: 'net', x: 6, y: 16, w: 6, h: 2 },
       { id: 'vast', x: 0, y: 18, w: 6, h: 4 },
-      { id: 'docker', x: 6, y: 18, w: 6, h: 4 },
+      { id: 'vastmarket', x: 6, y: 18, w: 6, h: 4 },
+      { id: 'docker', x: 0, y: 22, w: 6, h: 4 },
     ]
   }
 
@@ -398,6 +401,8 @@ export default function App() {
         return <FansWidget snap={snap} admin={admin} readOnly={status?.read_only ?? false} dryRun={status?.dry_run ?? false} monitor={monitor} dutyOverride={status?.capabilities?.dutyOverride ?? true} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'fans')} onRowCfg={(c) => setRowCfg('fans', c)} />
       case 'vast':
         return <VastWidget snap={snap} />
+      case 'vastmarket':
+        return <VastMarketWidget snap={snap} />
       case 'docker':
         return <DockerWidget snap={snap} />
       default:
@@ -547,6 +552,7 @@ function sourceFor(type: string): 'bmc' | 'gpu' | 'vast' | 'docker' | null {
     case 'volts':
       return 'bmc'
     case 'vast':
+    case 'vastmarket':
       return 'vast'
     case 'docker':
       return 'docker'

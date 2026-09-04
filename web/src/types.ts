@@ -108,6 +108,17 @@ export interface Container {
   memTotalBytes: number
 }
 
+export interface VastGpu {
+  name: string
+  rentedVerified: number
+  availVerified: number
+  usage: number
+  priceP10: number
+  priceMedian: number
+  priceP90: number
+  tflopsPerDollar: number
+}
+
 export interface Snapshot {
   time: string
   cpu: Partial<CPU>
@@ -119,6 +130,7 @@ export interface Snapshot {
   thermals: Thermal[]
   extra: Scalar[]
   vastRigs?: VastRig[]
+  vastGpus?: VastGpu[]
   containers?: Container[]
 }
 

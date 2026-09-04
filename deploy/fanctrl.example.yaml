@@ -69,6 +69,9 @@ vast:
   api_key_path: "/etc/fanctrl/vast_api_key"
   # How often the CLI is invoked (default 60s).
   interval: 60s
+  # GPU name prefixes shown in the GPU market widget (begins-with,
+  # case-insensitive; empty = all GPU types).
+  market_filter: ["RTX 5090", "RTX PRO 6000"]
 
 # Read-only Docker container metadata (renters' instances on the rig):
 # names, images/templates, status, CPU/mem. Never touches container contents

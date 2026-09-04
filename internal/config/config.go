@@ -108,6 +108,9 @@ type VastConfig struct {
 	APIKeyPath string `yaml:"api_key_path"`
 	// Interval throttles CLI invocations (default 60s).
 	Interval time.Duration `yaml:"interval"`
+	// MarketFilter limits the GPU-market widget to these GPU names
+	// (empty = all GPU types).
+	MarketFilter []string `yaml:"market_filter"`
 }
 
 // DockerConfig configures the optional read-only Docker container provider.
@@ -239,7 +242,8 @@ func DefaultLayout() []Widget {
 		{ID: "volts", Type: "volts", X: 0, Y: 16, W: 6, H: 2, Show: true},
 		{ID: "net", Type: "net", X: 6, Y: 16, W: 6, H: 2, Show: true},
 		{ID: "vast", Type: "vast", X: 0, Y: 18, W: 6, H: 4, Show: true},
-		{ID: "docker", Type: "docker", X: 6, Y: 18, W: 6, H: 4, Show: true},
+		{ID: "vastmarket", Type: "vastmarket", X: 6, Y: 18, W: 6, H: 4, Show: true},
+		{ID: "docker", Type: "docker", X: 0, Y: 22, W: 6, H: 4, Show: true},
 	}
 }
 

@@ -138,6 +138,9 @@ func merge(dst *metrics.Snapshot, src metrics.Snapshot) {
 	if len(src.VastRigs) > 0 {
 		dst.VastRigs = src.VastRigs
 	}
+	if src.VastGpus != nil {
+		dst.VastGpus = src.VastGpus
+	}
 	if src.Containers != nil {
 		dst.Containers = src.Containers
 	}

@@ -193,9 +193,10 @@ func buildProviders(cfg config.Config, log *slog.Logger) ([]metrics.Provider, me
 		// Optional read-only Vast.ai hosting telemetry (earnings/rates/contracts).
 		if cfg.Vast.Enabled {
 			providers = append(providers, vast.NewProvider(vast.Options{
-				CLI:        cfg.Vast.CLI,
-				APIKeyPath: cfg.Vast.APIKeyPath,
-				Interval:   cfg.Vast.Interval,
+				CLI:          cfg.Vast.CLI,
+				APIKeyPath:   cfg.Vast.APIKeyPath,
+				Interval:     cfg.Vast.Interval,
+				MarketFilter: cfg.Vast.MarketFilter,
 			}))
 		}
 		// Optional read-only Docker container metadata (renters' instances).

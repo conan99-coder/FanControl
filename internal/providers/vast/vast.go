@@ -35,15 +35,19 @@ type Options struct {
 	APIKeyPath string
 	// Interval is the minimum time between CLI invocations (default 1m).
 	Interval time.Duration
+	// MarketFilter limits the GPU-market metrics to these GPU names (empty =
+	// all).
+	MarketFilter []string
 }
 
 // Provider implements metrics.Provider.
 type Provider struct {
 	opts Options
 
-	mu        sync.Mutex
-	lastFetch time.Time
-	cached    []metrics.VastRig
+	mu         sync.Mutex
+	lastFetch  time.Time
+	cached     []metrics.VastRig
+	cachedGpus []metrics.VastGpu
 }
 
 // NewProvider builds a Vast.ai provider.
@@ -64,24 +68,81 @@ func (p *Provider) Name() string { return "vast" }
 func (p *Provider) Close() error { return nil }
 
 // Collect implements Provider. It re-fetches at most every Interval; between
-// refreshes the cached result is returned.
+// refreshes the cached result is returned. The GPU-market metrics are
+// best-effort: if that query fails, the previous metrics are kept and the rig
+// data is still returned.
 func (p *Provider) Collect(ctx context.Context) (metrics.Snapshot, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.cached) == 0 || time.Since(p.lastFetch) >= p.opts.Interval {
+	if p.cached == nil || time.Since(p.lastFetch) >= p.opts.Interval {
 		rigs, err := p.fetch(ctx)
 		if err != nil {
 			return metrics.Snapshot{}, err
 		}
 		p.cached = rigs
+		if gpus, err := p.fetchMetrics(ctx); err == nil {
+			p.cachedGpus = gpus
+		}
 		p.lastFetch = time.Now()
 	}
-	return metrics.Snapshot{Time: time.Now(), VastRigs: p.cached}, nil
+	return metrics.Snapshot{Time: time.Now(), VastRigs: p.cached, VastGpus: p.cachedGpus}, nil
 }
 
 // fetch runs the CLI once and parses the machine list.
 func (p *Provider) fetch(ctx context.Context) ([]metrics.VastRig, error) {
-	cmd := exec.CommandContext(ctx, p.opts.CLI, "show", "machines", "--raw")
+	out, err := p.run(ctx, "show", "machines", "--raw")
+	if err != nil {
+		return nil, err
+	}
+	return parseMachines(out)
+}
+
+// fetchMetrics queries the GPU marketplace snapshot (`vastai metrics gpu
+// --verified true --raw`) and applies the configured name filter.
+func (p *Provider) fetchMetrics(ctx context.Context) ([]metrics.VastGpu, error) {
+	out, err := p.run(ctx, "metrics", "gpu", "--verified", "true", "--raw")
+	if err != nil {
+		return nil, err
+	}
+	gpus, err := parseGPUMetrics(out)
+	if err != nil {
+		return nil, err
+	}
+	return filterGpus(gpus, p.opts.MarketFilter), nil
+}
+
+// filterGpus keeps GPU rows whose name starts with any of the given prefixes
+// (case-insensitive "begins with", so "RTX PRO 6000" matches "RTX PRO 6000 WS"
+// and "RTX PRO 6000 S"). Empty filter = all rows.
+func filterGpus(gpus []metrics.VastGpu, prefixes []string) []metrics.VastGpu {
+	if len(prefixes) == 0 {
+		return gpus
+	}
+	lower := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			lower = append(lower, p)
+		}
+	}
+	if len(lower) == 0 {
+		return gpus
+	}
+	var filtered []metrics.VastGpu
+	for _, g := range gpus {
+		name := strings.ToLower(g.Name)
+		for _, p := range lower {
+			if strings.HasPrefix(name, p) {
+				filtered = append(filtered, g)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// run executes the vastai CLI once with the configured API key.
+func (p *Provider) run(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, p.opts.CLI, args...)
 	if p.opts.APIKeyPath != "" {
 		key, err := readSecret(p.opts.APIKeyPath)
 		if err != nil {
@@ -102,7 +163,7 @@ func (p *Provider) fetch(ctx context.Context) ([]metrics.VastRig, error) {
 		}
 		return nil, fmt.Errorf("vast %s: %w", p.opts.CLI, err)
 	}
-	return parseMachines(out)
+	return out, nil
 }
 
 // readSecret reads a 0600 file or env:VAR reference.
@@ -136,6 +197,49 @@ type rawMachine struct {
 	Verification   string   `json:"verification"`
 	Reliability    float64  `json:"reliability2"`
 	Geolocation    string   `json:"geolocation"`
+}
+
+// rawGpuMetric mirrors the fields of `vastai metrics gpu --raw` that we use.
+type rawGpuMetric struct {
+	Name            string  `json:"gpu_name"`
+	RentedVerified  int     `json:"rented_verified"`
+	AvailVerified   int     `json:"avail_verified"`
+	Usage           float64 `json:"usage"`
+	PriceP10        float64 `json:"price_p10"`
+	PriceMedian     float64 `json:"price_median"`
+	PriceP90        float64 `json:"price_p90"`
+	TFLOPSPerDollar float64 `json:"tflops_per_dollar"`
+}
+
+// parseGPUMetrics maps the marketplace metrics JSON to metric types.
+func parseGPUMetrics(data []byte) ([]metrics.VastGpu, error) {
+	var parsed struct {
+		Success bool           `json:"success"`
+		Gpus    []rawGpuMetric `json:"gpus"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("parse vast metrics gpu: %w", err)
+	}
+	if !parsed.Success {
+		return nil, fmt.Errorf("vast metrics gpu: success=false")
+	}
+	gpus := make([]metrics.VastGpu, 0, len(parsed.Gpus))
+	for _, g := range parsed.Gpus {
+		gpus = append(gpus, metrics.VastGpu{
+			Name:            g.Name,
+			RentedVerified:  g.RentedVerified,
+			AvailVerified:   g.AvailVerified,
+			Usage:           g.Usage,
+			PriceP10:        g.PriceP10,
+			PriceMedian:     g.PriceMedian,
+			PriceP90:        g.PriceP90,
+			TFLOPSPerDollar: g.TFLOPSPerDollar,
+		})
+	}
+	if gpus == nil {
+		gpus = []metrics.VastGpu{}
+	}
+	return gpus, nil
 }
 
 // parseMachines maps the CLI JSON to metric types.
