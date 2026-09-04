@@ -106,6 +106,7 @@ func (s *Server) routes() {
 	s.mux.Handle("/api/fan/mode", s.adminWrap(s.method("POST", s.handleSetFanMode)))
 	s.mux.Handle("/api/fan/duty", s.adminWrap(s.method("POST", s.handleSetDuty)))
 	s.mux.Handle("/api/fan/gpu", s.adminWrap(s.method("POST", s.handleSetGPUFan)))
+	s.mux.Handle("/api/gpu/power", s.adminWrap(s.method("POST", s.handleSetGPUPower)))
 	s.mux.Handle("/api/audit", s.adminWrap(http.HandlerFunc(s.handleAudit)))
 
 	// SSE stream
@@ -423,6 +424,25 @@ func (s *Server) handleSetGPUFan(w http.ResponseWriter, r *http.Request) {
 	}
 	sess, _ := sessionFrom(r.Context())
 	if err := s.ctrl.SetGPUFan(r.Context(), sess.User, req.GPU, req.Pct); err != nil {
+		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleSetGPUPower sets a GPU power limit (watts). Admin-only; gated by the
+// control service (monitor/read-only/dry-run) like every other write.
+func (s *Server) handleSetGPUPower(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		GPU   int     `json:"gpu"`
+		Watts float64 `json:"watts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Watts <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "gpu and watts required"})
+		return
+	}
+	sess, _ := sessionFrom(r.Context())
+	if err := s.ctrl.SetGPUPowerLimit(r.Context(), sess.User, req.GPU, req.Watts); err != nil {
 		writeJSON(w, http.StatusFailedDependency, map[string]string{"error": err.Error()})
 		return
 	}

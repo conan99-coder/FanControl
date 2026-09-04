@@ -17,8 +17,8 @@ import (
 
 // Controller performs GPU fan writes via nvidia-smi.
 type Controller struct {
-	smi        string
-	supported  bool // whether any GPU accepts fan writes
+	smi       string
+	supported bool // whether any GPU accepts fan writes
 }
 
 // NewController builds a GPU fan controller. It probes whether the cards report
@@ -34,9 +34,25 @@ func NewController(smi string) *Controller {
 	return c
 }
 
-// Capabilities reports GPU fan control only if the probe passed.
+// Capabilities reports GPU fan control only if the probe passed. Power-limit
+// writes are reported available (nvidia-smi -pl is supported on these cards).
 func (c *Controller) Capabilities() metrics.Capabilities {
-	return metrics.Capabilities{GPUFanControl: c.supported}
+	return metrics.Capabilities{GPUFanControl: c.supported, GPUPowerControl: true}
+}
+
+// SetGPUPowerLimit sets the GPU power limit in watts via `nvidia-smi -i <idx>
+// -pl <watts>`. The driver clamps/validates the range and returns an error for
+// values outside the card's min/max.
+func (c *Controller) SetGPUPowerLimit(ctx context.Context, gpuIndex int, watts float64) error {
+	if watts < 50 || watts > 1000 {
+		return fmt.Errorf("watts must be 50-1000, got %v", watts)
+	}
+	cmd := exec.CommandContext(ctx, c.smi, "-i", strconv.Itoa(gpuIndex), "-pl", strconv.Itoa(int(watts)))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("nvidia-smi -pl: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // SetGPUFan sets fan % for a GPU via `nvidia-smi -i <idx> -c <pct>`.

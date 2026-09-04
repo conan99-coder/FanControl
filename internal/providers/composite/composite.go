@@ -41,6 +41,7 @@ func (c *Controller) Capabilities() metrics.Capabilities {
 	if c.gpu != nil {
 		g := c.gpu.Capabilities()
 		caps.GPUFanControl = caps.GPUFanControl || g.GPUFanControl
+		caps.GPUPowerControl = caps.GPUPowerControl || g.GPUPowerControl
 	}
 	return caps
 }
@@ -83,4 +84,12 @@ func (c *Controller) SetGPUFan(ctx context.Context, gpuIndex int, pct float64) e
 		return errNoGPU
 	}
 	return c.gpu.SetGPUFan(ctx, gpuIndex, pct)
+}
+
+// SetGPUPowerLimit delegates to the GPU controller.
+func (c *Controller) SetGPUPowerLimit(ctx context.Context, gpuIndex int, watts float64) error {
+	if c.gpu == nil {
+		return errNoGPU
+	}
+	return c.gpu.SetGPUPowerLimit(ctx, gpuIndex, watts)
 }

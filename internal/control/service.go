@@ -184,6 +184,26 @@ func (s *Service) SetGPUFan(ctx context.Context, actor string, gpuIndex int, pct
 	return nil
 }
 
+// SetGPUPowerLimit sets a GPU power limit (watts), respecting safety gates.
+func (s *Service) SetGPUPowerLimit(ctx context.Context, actor string, gpuIndex int, watts float64) error {
+	if s.Monitor() {
+		return errMonitor
+	}
+	if s.ro {
+		return errReadOnly
+	}
+	if s.dry {
+		s.log.Info("dry-run: would set gpu power limit", "actor", actor, "gpu", gpuIndex, "watts", watts)
+		s.auditRecord(actor, "set_gpu_power_limit", map[string]any{"gpu": gpuIndex, "watts": watts}, "dry-run")
+		return nil
+	}
+	if err := s.ctrl.SetGPUPowerLimit(ctx, gpuIndex, watts); err != nil {
+		return err
+	}
+	s.auditRecord(actor, "set_gpu_power_limit", map[string]any{"gpu": gpuIndex, "watts": watts}, "ok")
+	return nil
+}
+
 // Audit returns the recent audit trail.
 func (s *Service) Audit() []AuditEntry {
 	if s.audit == nil {

@@ -363,7 +363,18 @@ export default function App() {
       case 'cpu':
         return <CpuWidget snap={snap} thresholds={status?.thresholds} />
       case 'gpu':
-        return <GpuWidget snap={snap} index={w.gpu ?? 0} thresholds={status?.thresholds} />
+        return (
+          <GpuWidget
+            snap={snap}
+            index={w.gpu ?? 0}
+            thresholds={status?.thresholds}
+            admin={admin}
+            monitor={monitor}
+            readOnly={status?.read_only ?? false}
+            dryRun={status?.dry_run ?? false}
+            gpuPowerControl={status?.capabilities?.gpuPowerControl ?? false}
+          />
+        )
       case 'disk':
         return <DiskWidget snap={snap} edit={editMode} rowsCfg={cfgFor(rowsCfg, 'disk')} onRowCfg={(c) => setRowCfg('disk', c)} thresholds={status?.thresholds} />
       case 'drives':

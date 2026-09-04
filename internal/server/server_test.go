@@ -19,9 +19,9 @@ import (
 // spa handler can be tested without the real build output.
 func fakeAssets() fs.FS {
 	return fstest.MapFS{
-		"index.html":                 &fstest.MapFile{Data: []byte("<!doctype html><html><head></head><body><div id=\"root\"></div></body></html>")},
-		"assets/index-DAqezshv.js":   &fstest.MapFile{Data: []byte("console.log('hi')")},
-		"assets/index-gKEx9fKO.css":  &fstest.MapFile{Data: []byte("body{}")},
+		"index.html":                &fstest.MapFile{Data: []byte("<!doctype html><html><head></head><body><div id=\"root\"></div></body></html>")},
+		"assets/index-DAqezshv.js":  &fstest.MapFile{Data: []byte("console.log('hi')")},
+		"assets/index-gKEx9fKO.css": &fstest.MapFile{Data: []byte("body{}")},
 	}
 }
 
@@ -83,15 +83,16 @@ func TestHandleMeta(t *testing.T) {
 // must be serialized as [] (never JSON null) so the SPA doesn't crash.
 type nilCtrl struct{}
 
-func (nilCtrl) Name() string { return "nil" }
+func (nilCtrl) Name() string                                                  { return "nil" }
 func (nilCtrl) ListFanProfiles(context.Context) ([]metrics.FanProfile, error) { return nil, nil }
 func (nilCtrl) ActiveFanProfile(context.Context) (metrics.FanProfileState, error) {
 	return metrics.FanProfileState{}, nil
 }
-func (nilCtrl) SetFanMode(context.Context, string) error { return nil }
-func (nilCtrl) SetFanDuty(context.Context, int, float64) error { return nil }
-func (nilCtrl) SetGPUFan(context.Context, int, float64) error { return nil }
-func (nilCtrl) Capabilities() metrics.Capabilities             { return metrics.Capabilities{} }
+func (nilCtrl) SetFanMode(context.Context, string) error             { return nil }
+func (nilCtrl) SetFanDuty(context.Context, int, float64) error       { return nil }
+func (nilCtrl) SetGPUFan(context.Context, int, float64) error        { return nil }
+func (nilCtrl) SetGPUPowerLimit(context.Context, int, float64) error { return nil }
+func (nilCtrl) Capabilities() metrics.Capabilities                   { return metrics.Capabilities{} }
 
 // handleProfiles is reached via a real Server; wire a server with the stub ctrl.
 func TestHandleProfilesNeverNull(t *testing.T) {

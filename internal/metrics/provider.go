@@ -32,15 +32,17 @@ type Controller interface {
 	SetFanDuty(ctx context.Context, fanID int, duty float64) error
 	// SetGPUFan sets target fan % on a GPU via NVML (nvidia-smi -c).
 	SetGPUFan(ctx context.Context, gpuIndex int, pct float64) error
+	// SetGPUPowerLimit sets the GPU power limit in watts (nvidia-smi -pl).
+	SetGPUPowerLimit(ctx context.Context, gpuIndex int, watts float64) error
 	// Capabilities reports what this controller can actually do (probed).
 	Capabilities() Capabilities
 }
 
 // Fan modes confirmed via SetFanModeActionInfo on the MC62-G40 BMC.
 const (
-	FanModeAuto  = "Auto"
-	FanModeHalf  = "Half"
-	FanModeFull  = "Full"
+	FanModeAuto = "Auto"
+	FanModeHalf = "Half"
+	FanModeFull = "Full"
 )
 
 // FanProfile mirrors the BMC FanprofileService profile shape.
@@ -71,7 +73,8 @@ type FanProfileState struct {
 // Capabilities describes what a controller supports, determined by probing
 // (e.g. whether the GPU accepts fan writes, whether the BMC exposes profiles).
 type Capabilities struct {
-	Profiles      bool `json:"profiles"`      // BMC profile switching available
-	DutyOverride  bool `json:"dutyOverride"`  // arrDuty editing available
-	GPUFanControl bool `json:"gpuFanControl"` // nvidia-smi -c fan writes work
+	Profiles        bool `json:"profiles"`        // BMC profile switching available
+	DutyOverride    bool `json:"dutyOverride"`    // arrDuty editing available
+	GPUFanControl   bool `json:"gpuFanControl"`   // nvidia-smi -c fan writes work
+	GPUPowerControl bool `json:"gpuPowerControl"` // nvidia-smi -pl power limit writes work
 }

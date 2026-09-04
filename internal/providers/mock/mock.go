@@ -184,7 +184,7 @@ func NewController() *Controller {
 // supported; duty override NOT (BMC rejects PUT on Fanprofile, 501). Kept in
 // sync so local dev shows the same UI state as the real rig.
 func (c *Controller) Capabilities() metrics.Capabilities {
-	return metrics.Capabilities{Profiles: true, DutyOverride: false, GPUFanControl: true}
+	return metrics.Capabilities{Profiles: true, DutyOverride: false, GPUFanControl: true, GPUPowerControl: true}
 }
 
 // ListFanProfiles implements Controller.
@@ -242,5 +242,16 @@ func (c *Controller) SetGPUFan(_ context.Context, gpuIndex int, pct float64) err
 	}
 	c.gpuFan[gpuIndex] = pct
 	c.Writes = append(c.Writes, fmt.Sprintf("set GPU %d fan -> %.0f%%", gpuIndex, pct))
+	return nil
+}
+
+// SetGPUPowerLimit implements Controller (fake: records the write).
+func (c *Controller) SetGPUPowerLimit(_ context.Context, gpuIndex int, watts float64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.FailWrites {
+		return fmt.Errorf("mock: write failure injected")
+	}
+	c.Writes = append(c.Writes, fmt.Sprintf("set GPU %d power limit -> %.0fW", gpuIndex, watts))
 	return nil
 }

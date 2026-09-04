@@ -4,6 +4,7 @@ export interface Capabilities {
   profiles: boolean
   dutyOverride: boolean
   gpuFanControl: boolean
+  gpuPowerControl?: boolean
 }
 
 export interface Thresholds {
@@ -206,6 +207,10 @@ export function setGPUFan(gpu: number, pct: number): Promise<{ ok: string }> {
   return json('/api/fan/gpu', { method: 'POST', body: JSON.stringify({ gpu, pct }) })
 }
 
+export function setGPUPower(gpu: number, watts: number): Promise<{ ok: string }> {
+  return json('/api/gpu/power', { method: 'POST', body: JSON.stringify({ gpu, watts }) })
+}
+
 // streamMetrics opens a live update stream and invokes cb on each snapshot.
 //
 // Implemented with fetch + a body reader instead of EventSource: EventSource
@@ -213,24 +218,43 @@ export function setGPUFan(gpu: number, pct: number): Promise<{ ok: string }> {
 // password-protected reverse proxy (e.g. Nginx Proxy Manager) every reconnect
 // gets challenged and the user sees a password popup every ~3s. Regular fetch
 // requests carry the cached credentials like any other page request.
+//
+// Unlike EventSource, a raw fetch reader never times out on its own — a
+// half-dead connection (proxy kill, network stall) would freeze the dashboard
+// forever. A watchdog aborts the attempt after STREAM_IDLE_MS without data and
+// reconnects, so the dashboard always recovers.
+const STREAM_IDLE_MS = 15000
+const STREAM_RETRY_MS = 3000
+
 export function streamMetrics(cb: (snap: Snapshot) => void): () => void {
   let stopped = false
-  const ctrl = new AbortController()
+  let controller: AbortController | null = null
   const run = async () => {
     while (!stopped) {
+      controller = new AbortController()
+      let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
       try {
         const res = await fetch('/api/stream', {
           credentials: 'include',
-          signal: ctrl.signal,
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
         })
         if (!res.ok || !res.body) throw new Error('stream status ' + res.status)
-        const reader = res.body.getReader()
+        reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
         for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
+          // Watchdog: if no chunk arrives within STREAM_IDLE_MS, treat the
+          // connection as dead, cancel it, and reconnect.
+          let timer: ReturnType<typeof setTimeout> | undefined
+          const timeout = new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => {
+            timer = setTimeout(() => resolve({ done: true }), STREAM_IDLE_MS)
+          })
+          const result = await Promise.race([reader.read(), timeout])
+          if (timer !== undefined) clearTimeout(timer)
+          if (result.done) break
+          const value = result.value
+          if (!value) continue
           buf += decoder.decode(value, { stream: true })
           // SSE frames: "data: {json}\n\n"
           let idx: number
@@ -254,13 +278,19 @@ export function streamMetrics(cb: (snap: Snapshot) => void): () => void {
       } catch {
         // stream dropped (or auth challenge): retry shortly
       }
+      // Release the current attempt's connection before reconnecting.
+      try {
+        await reader?.cancel()
+      } catch {
+        // ignore
+      }
       if (stopped) return
-      await new Promise((r) => setTimeout(r, 3000))
+      await new Promise((r) => setTimeout(r, STREAM_RETRY_MS))
     }
   }
   run()
   return () => {
     stopped = true
-    ctrl.abort()
+    controller?.abort()
   }
 }

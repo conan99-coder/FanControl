@@ -123,31 +123,31 @@ func (c *Client) Discover(ctx context.Context) metrics.Discovery {
 
 // Thermal is the Redfish Thermal resource we care about.
 type Thermal struct {
-	TemperatureCelsius  []Temperature  `json:"Temperatures"`
-	Fans                []Fan          `json:"Fans"`
+	TemperatureCelsius []Temperature `json:"Temperatures"`
+	Fans               []Fan         `json:"Fans"`
 }
 
 // Temperature is one sensor.
 type Temperature struct {
-	Name             string  `json:"Name"`
-	ReadingCelsius   float64 `json:"ReadingCelsius"`
-	UpperThreshold   float64 `json:"UpperThresholdCritical"`
-	LowerThreshold   float64 `json:"LowerThresholdCritical"`
-	MemberID         string  `json:"MemberId"`
-	SensorNumber     int     `json:"SensorNumber"` // authoritative BMC sensor id
+	Name           string  `json:"Name"`
+	ReadingCelsius float64 `json:"ReadingCelsius"`
+	UpperThreshold float64 `json:"UpperThresholdCritical"`
+	LowerThreshold float64 `json:"LowerThresholdCritical"`
+	MemberID       string  `json:"MemberId"`
+	SensorNumber   int     `json:"SensorNumber"` // authoritative BMC sensor id
 }
 
 // Fan is one fan sensor in Redfish. SensorNumber is the authoritative BMC sensor
 // id (matches the BMC web UI); Status.State distinguishes Enabled/Absent.
 type Fan struct {
-	Name             string  `json:"Name"`
-	Reading          float64 `json:"Reading"`
-	ReadingUnits     string  `json:"ReadingUnits"`
-	MinReading       float64 `json:"MinReadingRange"`
-	MaxReading       float64 `json:"MaxReadingRange"`
-	MemberID         string  `json:"MemberId"`
-	SensorNumber     int     `json:"SensorNumber"`
-	Status           Status  `json:"Status"`
+	Name         string  `json:"Name"`
+	Reading      float64 `json:"Reading"`
+	ReadingUnits string  `json:"ReadingUnits"`
+	MinReading   float64 `json:"MinReadingRange"`
+	MaxReading   float64 `json:"MaxReadingRange"`
+	MemberID     string  `json:"MemberId"`
+	SensorNumber int     `json:"SensorNumber"`
+	Status       Status  `json:"Status"`
 }
 
 // Status is a minimal Redfish status object (only State is used).
@@ -288,17 +288,17 @@ const fanmodeChild = "/FanMode"
 
 // gbtFanProfile is the Fanprofile resource (arrProfile + strMode).
 type gbtFanProfile struct {
-	ID        string         `json:"Id"`
-	Name      string         `json:"Name"`
-	StrMode   string         `json:"strMode"`
-	StrVer    string         `json:"strVersion"`
-	Profiles  []gbtProfile   `json:"arrProfile"`
+	ID       string       `json:"Id"`
+	Name     string       `json:"Name"`
+	StrMode  string       `json:"strMode"`
+	StrVer   string       `json:"strVersion"`
+	Profiles []gbtProfile `json:"arrProfile"`
 }
 
 type gbtProfile struct {
-	StrName    string      `json:"strName"`
-	StrVer     string      `json:"strVersion"`
-	Policies   []bmcPolicy `json:"arrPolicy"`
+	StrName  string      `json:"strName"`
+	StrVer   string      `json:"strVersion"`
+	Policies []bmcPolicy `json:"arrPolicy"`
 }
 
 // fanModeResource is the FanMode resource (action target).
@@ -428,13 +428,13 @@ func interpolate(xs, ys []float64, x float64) float64 {
 // Gigabyte MegaRAC firmware emits them). It is translated to/from
 // metrics.Policy.
 type bmcPolicy struct {
-	ArrDuty       []float64 `json:"arrDuty"`
-	ArrFanSensor  []int     `json:"arrFanSensor"`
-	ArrRef        []float64 `json:"arrRef"`
-	ArrSensor     []int     `json:"arrSensor"`
-	IInitDuty     float64   `json:"iInitDuty"`
-	IPolicyType   int       `json:"iPolicyType"`
-	IInSDR        int       `json:"iInSDR"`
+	ArrDuty      []float64 `json:"arrDuty"`
+	ArrFanSensor []int     `json:"arrFanSensor"`
+	ArrRef       []float64 `json:"arrRef"`
+	ArrSensor    []int     `json:"arrSensor"`
+	IInitDuty    float64   `json:"iInitDuty"`
+	IPolicyType  int       `json:"iPolicyType"`
+	IInSDR       int       `json:"iInSDR"`
 }
 
 func toMetricsPolicy(b bmcPolicy) metrics.Policy {
@@ -519,6 +519,12 @@ func (c *Client) SetFanDuty(_ context.Context, _ int, _ float64) error {
 // back to the GPU controller.
 func (c *Client) SetGPUFan(_ context.Context, _ int, _ float64) error {
 	return fmt.Errorf("redfish controller cannot set GPU fan")
+}
+
+// SetGPUPowerLimit is not a BMC capability; the composite controller falls
+// back to the GPU controller.
+func (c *Client) SetGPUPowerLimit(_ context.Context, _ int, _ float64) error {
+	return fmt.Errorf("redfish controller cannot set GPU power limit")
 }
 
 // Capabilities reflects what is ACTUALLY supported on this board (verified
